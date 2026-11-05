@@ -152,19 +152,26 @@ import CastPanel from './cast-panel.js';
 // Initialize HistoryManager, TabManager, and Summarizer
 const historyManager = new HistoryManager(); // Instantiate HistoryManager directly
 let tabManager = new TabManager(contentContainer, historyManager, bookmarkBtn); // Pass contentContainer, historyManager, and bookmarkBtn
-new WorkspacePanel(tabManager);
+const workspacePanel = new WorkspacePanel(tabManager);
+window.workspacePanel = workspacePanel;
+document.getElementById('workspace-bar').inert = true;
+document.getElementById('controls').inert = true;
 window.tabManager = tabManager; // Make it accessible to other scripts like summarizer.js
 let browserSessionSyncTimer = null;
 const scheduleBrowserSessionSync = () => {
-  if (browserSessionSyncTimer) {
-    clearTimeout(browserSessionSyncTimer);
-  }
+  if (!workspacePanel.ready || workspacePanel.transitioning) return;
+  if (browserSessionSyncTimer) return;
   browserSessionSyncTimer = setTimeout(() => {
     browserSessionSyncTimer = null;
-    window.electronAPI.send('browser-session-state', tabManager.getSessionSnapshot());
+    void workspacePanel.autosave().catch(error => console.warn('[Sessions] Autosave failed:', error));
   }, 100);
 };
 window.addEventListener('tab-session-changed', scheduleBrowserSessionSync);
+window.addEventListener('workspace-session-ready', scheduleBrowserSessionSync);
+window.addEventListener('workspace-session-changing', () => {
+  clearTimeout(browserSessionSyncTimer);
+  browserSessionSyncTimer = null;
+});
 const browserActionCoordinator = new BrowserActionCoordinator();
 const assistantController = new AssistantController(tabManager, browserActionCoordinator);
 window.assistantController = assistantController;
@@ -1108,7 +1115,7 @@ window.electronAPI.on('save-open-tabs', async () => {
   console.log('[Renderer] History saved via IPC. Sending open-tabs-saved IPC.'); // Added log
 
   // Send confirmation back to main process *after* saving is initiated
-  window.electronAPI.send('open-tabs-saved', tabManager.getSessionSnapshot());
+  window.electronAPI.send('open-tabs-saved', workspacePanel.getCurrentSnapshot());
 });
 
 
@@ -1145,90 +1152,15 @@ window.electronAPI.invoke('get-initial-status').then(async (status) => { // Adde
     console.warn(`[Renderer] Could not load crash recovery session: ${error?.message || error}`);
   }
 
-  const interruptedSessionTabs = startupSession?.interrupted && Array.isArray(startupSession?.session?.tabs)
-    ? startupSession.session.tabs
-    : [];
-  const cleanSessionTabs = !startupSession?.interrupted && Array.isArray(startupSession?.session?.tabs)
-    ? startupSession.session.tabs
-    : [];
-
-  // Load open tabs from history unless an interrupted session has a usable
-  // journal. History stays the source for ordinary, clean launches.
-  const history = historyManager.getHistory();
-  const historyTabs = history.filter(entry => entry.state === 'open' && !/^browser:\/\/view\//i.test(entry.url));
-  const openTabs = interruptedSessionTabs.length > 0 ? interruptedSessionTabs
-    : cleanSessionTabs.length > 0 ? cleanSessionTabs : historyTabs;
-  const restoreFromInterruptedSession = interruptedSessionTabs.length > 0;
-  const cleanActiveUrl = cleanSessionTabs.find((tab) => tab.id === startupSession?.session?.activeTabId)?.url || null;
-  let activeTabId = null; // Store the ID of the tab to activate
-
-  if (openTabs.length > 0) {
-    console.log(`[Renderer] Restoring ${openTabs.length} tab(s)${restoreFromInterruptedSession ? ' after an unexpected exit' : ' from history'}...`);
-
-    openTabs.forEach((tab, index) => {
-      const isActiveInterruptedTab = restoreFromInterruptedSession
-        && tab.id === startupSession?.session?.activeTabId;
-      const isLastTab = index === openTabs.length - 1;
-      const isActiveCleanTab = !restoreFromInterruptedSession && cleanActiveUrl === tab.url;
-      // A native browser-process crash has no trustworthy per-page cause. Keep
-      // the currently active page paused (it is the likely trigger) while all
-      // other tabs remain available. Renderer crashes are already marked on
-      // their exact tab and are paused for the same reason.
-      const pauseRecovery = restoreFromInterruptedSession && (isActiveInterruptedTab || tab.crashed === true);
-      const options = {
-        activate: false,
-        deferLoad: !pauseRecovery,
-        title: tab.title || 'Untitled',
-        recoveryPaused: pauseRecovery,
-        recoveryMessage: pauseRecovery
-          ? 'This page was still loading when the browser stopped unexpectedly. Reload it only when you are ready.'
-          : null
-      };
-      const newTabId = tabManager.createTab(tab.url, options);
-      if (tab.group) tabManager.setTabGroup(newTabId, tab.group);
-
-      if (restoreFromInterruptedSession ? isActiveInterruptedTab : (isActiveCleanTab || (!cleanActiveUrl && isLastTab))) {
-        activeTabId = newTabId;
-      }
-    });
-
-    // After all tabs are created, switch to the designated active tab
-    if (activeTabId) {
-        console.log(`[Renderer] All tabs created, switching to the active one: ${activeTabId}`);
-        tabManager.switchToTab(activeTabId); // This will also load its content if deferred
-    } else if (tabManager.tabs.length > 0) {
-        // Fallback: if activeTabId wasn't set but tabs exist, activate the first one
-        console.log(`[Renderer] No specific active tab found, activating the first available tab.`);
-        tabManager.switchToTab(tabManager.tabs[0].id);
-    } else {
-        // If no tabs were restored and no fallback, create a new blank tab
-        console.log('[Renderer] No tabs restored and no fallback available. Creating a default blank tab.');
-        tabManager.createTab('about:blank'); // Ensure at least one tab exists
-    }
-
-    tabManager.restoreCollapsedGroups?.(startupSession?.session?.collapsedGroups || []);
-
-    // After initial tabs are created and the active one is switched to,
-    // explicitly update the bookmark button state for the active tab.
-    const initialActiveTab = tabManager.getActiveTab();
-    if (initialActiveTab) {
-        updateWorkspaceAwareControls(initialActiveTab);
-        const initialActiveTabUrl = initialActiveTab.url;
-        const isBookmarked = initialActiveTabUrl ? historyManager.isBookmarked(initialActiveTabUrl) : false;
-        setBookmarkButtonState(isBookmarked);
-    }
-
-
-  } else {
-    // Whitelist channels
-    console.log('[Renderer] No open tabs found in history. Creating a default blank tab.');
-    tabManager.createTab('about:blank'); // Create a default tab if history is empty
-
-    // For a blank tab on startup, ensure the bookmark button is not bookmarked
-    updateWorkspaceAwareControls(tabManager.getActiveTab());
-    setBookmarkButtonState(false);
-  }
-
+  if (!startupSession?.workspace?.id) throw new Error('Could not open your session.');
+  tabManager.replaceSession(startupSession.session, {interrupted: startupSession.interrupted});
+  workspacePanel.initialize(startupSession.workspace);
+  document.getElementById('workspace-bar').inert = false;
+  document.getElementById('controls').inert = false;
+  scheduleBrowserSessionSync();
+  const initialActiveTab = tabManager.getActiveTab();
+  updateWorkspaceAwareControls(initialActiveTab);
+  setBookmarkButtonState(initialActiveTab?.url ? historyManager.isBookmarked(initialActiveTab.url) : false);
 
   // Initialize the summarizer with the active webview (will be called after first tab is created and switched to)
   // initializeSummarizer(); // Moved initialization to be triggered by tab-switched event for the first tab
@@ -1238,7 +1170,18 @@ window.electronAPI.invoke('get-initial-status').then(async (status) => { // Adde
   // Note: The close button listener is now attached in the separate DOMContentLoaded listener below.
   // The redundant nested listener block has been removed.
 
-}).catch(err => console.error('Error during initial setup:', err));
+}).catch(err => {
+  console.error('Error during initial setup:', err);
+  workspacePanel.saveState = `Could not open session: ${err.message || err}`;
+  workspacePanel.updateSessionStatus();
+  const message = document.createElement('div');
+  message.className = 'session-startup-error';
+  message.setAttribute('role', 'alert');
+  const text = document.createElement('p'); text.textContent = 'Could not open your saved session. Your saved tabs have not been replaced.';
+  const retry = document.createElement('button'); retry.className = 'toolbar-btn'; retry.textContent = 'Retry';
+  retry.addEventListener('click', () => window.location.reload());
+  message.append(text, retry); contentContainer.append(message);
+});
 
 
 if (closeSummaryBtn && summaryPanel) {

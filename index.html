@@ -19,7 +19,7 @@
         </div>
         <div id="tab-search" class="tab-search" hidden>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 4 4"/></svg>
-            <input id="tab-search-input" type="search" placeholder="Search tabs…" aria-label="Search open tabs by title or address" aria-controls="tab-bar" autocomplete="off" spellcheck="false">
+            <input id="tab-search-input" type="search" placeholder="Search titles or websites…" aria-label="Search all tabs by title or website, including unloaded tabs" aria-controls="tab-bar" autocomplete="off" spellcheck="false">
             <button id="tab-search-clear" type="button" aria-label="Clear tab search" title="Clear search">×</button>
             <span id="tab-search-status" class="visually-hidden" role="status"></span>
         </div>
@@ -306,15 +306,14 @@
     </aside>
 
     <dialog class="workspace-dialog" id="workspace-dialog" aria-labelledby="workspace-title">
-        <header><div><small>YOUR WORKSPACE</small><h2 id="workspace-title">Sessions</h2></div><button id="workspace-close" class="toolbar-btn" aria-label="Close">×</button></header>
-        <p>Save a set of tabs and pick up where you left off.</p>
-        <form id="session-save-form">
-            <label class="session-save-target-label" for="session-save-target">Save to</label>
-            <select id="session-save-target" aria-label="Save to session"><option value="">New session…</option></select>
-            <input id="session-name" required maxlength="80" placeholder="Name this session…" aria-label="Session name">
-            <button id="session-save-btn" class="toolbar-btn toolbar-btn--primary">Create session</button>
+        <header><div><small>YOUR WORKSPACE</small><h2 id="workspace-title">Sessions</h2></div><div class="workspace-dialog-actions"><button id="session-new-btn" type="button" class="toolbar-btn">New session</button><button id="workspace-close" class="toolbar-btn" aria-label="Close">×</button></div></header>
+        <p>Every tab belongs to a session. Tabs and groups are saved automatically; your last session opens when Orbit starts.</p>
+        <p id="session-autosave-status" role="status">Starting session…</p>
+        <form id="session-rename-form">
+            <label for="session-name" class="session-name-label">Current session</label>
+            <input id="session-name" required maxlength="80" placeholder="Session name…" aria-label="Current session name">
+            <button id="session-rename-btn" class="toolbar-btn toolbar-btn--primary">Rename</button>
         </form>
-        <p id="session-save-hint">Create a session from the current tabs and groups.</p>
         <p id="workspace-status" role="status"></p><div id="saved-session-list"></div>
     </dialog>
     <dialog class="workspace-dialog" id="groups-dialog" aria-labelledby="groups-title">

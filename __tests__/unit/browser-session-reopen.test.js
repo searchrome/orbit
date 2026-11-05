@@ -11,13 +11,15 @@ function loadLifecycle() {
   const window = {webContents: host, isDestroyed: () => false};
   const old = {tabs: [{id: 'old', url: 'https://example.com/old', group: 'Old group'}], activeTabId: 'old'};
   const context = {
-    mainWindow: window, windowStartupSessions: new Map(),
+    mainWindow: window, windowStartupSessions: new Map(), windowSessionSnapshots: new Map(),
+    saveRunningBrowserSession: jest.fn().mockResolvedValue(undefined),
     startupCleanSession: old, startupRecoverySession: old,
     BROWSER_SESSION_VERSION: 1,
     isHostBrowserEvent: event => event.sender === host,
     queueBrowserSessionWrite: jest.fn().mockResolvedValue(undefined), console,
     ipcMain: {handle: (channel, handler) => { context.getStartup = handler; }}
   };
+  context.automaticSessions = {start: jest.fn(async (windowId, options) => ({workspace: {id: 'session-1', session: options.fallback}, interrupted: options.interrupted}))};
   vm.createContext(context);
   vm.runInContext(['sanitizeSessionTab', 'sanitizeBrowserSession', 'markBrowserSessionClean'].map(productionFunction).join('\n'), context);
   const start = source.indexOf("ipcMain.handle('get-startup-session'");
@@ -30,7 +32,7 @@ describe('closing a window and reopening from the macOS Dock', () => {
     const {context, host} = loadLifecycle();
     const latest = {tabs: [{id: 'latest', title: 'Latest page', url: 'https://example.com/latest', group: 'Research'}], activeTabId: 'latest', collapsedGroups: ['Research']};
     await context.markBrowserSessionClean(latest);
-    const restored = context.getStartup({sender: host});
+    const restored = await context.getStartup({sender: host});
     expect(restored.interrupted).toBe(false);
     expect(restored.session.tabs).toHaveLength(1);
     expect(restored.session.tabs[0]).toMatchObject(latest.tabs[0]);
@@ -42,7 +44,7 @@ describe('closing a window and reopening from the macOS Dock', () => {
     const {context, host} = loadLifecycle();
     for (const group of ['First', 'Second', 'Third']) {
       await context.markBrowserSessionClean({tabs: [{id: group, url: `https://example.com/${group}`, group}], activeTabId: group});
-      expect(context.getStartup({sender: host}).session.tabs[0].group).toBe(group);
+      expect((await context.getStartup({sender: host})).session.tabs[0].group).toBe(group);
     }
   });
   test('does not silently discard tabs after the first fifty', () => {
@@ -66,6 +68,7 @@ describe('closing a window and reopening from the macOS Dock', () => {
       console, browserWindows: windows, mainWindow: first, browserWindowCloseWrite: Promise.resolve(),
       windowSessionSnapshots: new Map([[2, {tabs: [{group: 'Second'}]}]]),
       isHostBrowserEvent: () => true,
+      persistWindowSession: jest.fn().mockResolvedValue(null),
       sanitizeBrowserSession: snapshot => snapshot,
       BrowserWindow: {fromWebContents: sender => sender.id === 1 ? first : second},
       saveRunningBrowserSession: async snapshot => { await Promise.resolve(); events.push(`running:${snapshot.tabs[0].group}`); },

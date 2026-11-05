@@ -1830,6 +1830,7 @@ body.vertical-tabs .tab--drop-after::after { top: auto; bottom: 0; }
 .workspace-dialog { width: min(650px, calc(100vw - 64px)); max-height: 80vh; overflow-y: auto; padding: 28px; border: 1px solid #e2e5f1; border-radius: 20px; box-shadow: 0 24px 90px #1e234333; color: #34415a; }
 .workspace-dialog::backdrop { background: #1f29424d; backdrop-filter: blur(3px); }
 .workspace-dialog header { display: flex; align-items: center; justify-content: space-between; }
+.workspace-dialog-actions { display: flex; align-items: center; gap: 8px; }
 .workspace-dialog h2 { margin: 5px 0 12px; letter-spacing: -.6px; font-size: 25px; }
 .workspace-dialog small { color: #868da5; font-size: 10px; letter-spacing: 1px; }
 .workspace-dialog p { color: #7b8399; font-size: 13px; line-height: 1.6; }
@@ -1873,14 +1874,14 @@ body.vertical-tabs .tab-group-badge { display: none; }
 
 /* Saved sessions expand into their saved groups and pages. */
 .saved-session { display: block; }
-.saved-session-summary { display: flex; align-items: center; gap: 12px; }
+.saved-session-summary { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
 .saved-session-toggle { display: flex; align-items: center; gap: 10px; flex: 1; min-width: 0; padding: 8px 4px; border: 0; border-radius: 8px; background: transparent; color: inherit; text-align: left; font: inherit; cursor: pointer; }
 .saved-session-toggle:hover { background: #f4f3fc; }
 .saved-session-toggle > span:last-child { min-width: 0; overflow-wrap: anywhere; }
 .saved-session-toggle:focus-visible { outline: 3px solid #aaa7ef; outline-offset: 2px; }
 .saved-session-chevron { flex-shrink: 0; font-size: 24px; color: #8c82bb; transition: transform .15s; }
 .saved-session-toggle[aria-expanded="true"] .saved-session-chevron { transform: rotate(90deg); }
-.saved-session-actions { display: flex; gap: 8px; flex-shrink: 0; }
+.saved-session-actions { display: flex; flex-wrap: wrap; gap: 8px; max-width: 100%; }
 .saved-session-pages { margin: 8px 0 0 14px; padding: 4px 0 4px 18px; border-left: 2px solid #e4ddf6; }
 .saved-session-pages[hidden] { display: none; }
 .saved-session-pages h4 { color: #7356a1; font-size: 11px; margin: 12px 0 8px; }
@@ -1889,13 +1890,13 @@ body.vertical-tabs .tab-group-badge { display: none; }
 .saved-session-pages li small { margin-top: 3px; letter-spacing: 0; font-size: 11px; color: #9199ab; }
 @media (max-width: 640px) { .saved-session-summary { flex-wrap: wrap; } .saved-session-toggle { flex-basis: 100%; } .saved-session-actions { margin-left: 24px; } }
 
-#session-save-form { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; margin-bottom: 4px; }
-.session-save-target-label { grid-column: 1 / -1; color: #7b8399; font-size: 11px; font-weight: 600; }
-#session-save-target { grid-column: 1 / -1; width: 100%; padding: 9px 12px; border: 1px solid #dce0ed; border-radius: 10px; background: #f7f6fc; color: #4e5971; font: inherit; font-size: 13px; }
-#session-save-target:focus-visible { outline: 3px solid #aaa7ef; outline-offset: 2px; }
-#session-save-hint { margin: 4px 0 18px; font-size: 11px; }
+#session-rename-form { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; margin-bottom: 12px; }
+.session-name-label { grid-column: 1 / -1; color: #7b8399; font-size: 11px; font-weight: 600; }
+#session-autosave-status { color: #23816b; }
+.session-current-badge { display: inline-block; margin-top: 6px; padding: 2px 7px; border-radius: 5px; background: #e9e7fc; color: #6155b6; font-size: 10px; }
 .saved-session--selected > .saved-session-summary { background: #f6f3fd; border-radius: 10px; }
-@media (max-width: 460px) { #session-save-form { grid-template-columns: minmax(0, 1fr); } }
+.session-startup-error { padding: 40px; color: #7b8399; }
+@media (max-width: 460px) { #session-rename-form { grid-template-columns: minmax(0, 1fr); } }
 
 /* Open-tab search occupies the sidebar or yields room from horizontal tabs. */
 .tab-search { display: flex; align-items: center; gap: 6px; flex: 0 1 210px; min-width: 120px; height: 32px; box-sizing: border-box; padding: 0 8px; border: 1px solid #d9d7ec; border-radius: 10px; background: white; color: #82779d; }

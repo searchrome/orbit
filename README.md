@@ -62,6 +62,36 @@ and [SECURITY.md](SECURITY.md) for reporting vulnerabilities.
 
 ## Usage
 
+### Search tabs
+
+Click the magnifying glass beside the tab layout and group buttons to search
+all open tabs by title or website address, including unloaded tabs and tabs
+inside collapsed groups. Combine words such as `github release` to match a
+website and page title together. Filtering does not load pages or close tabs.
+
+With left-side tabs, the field appears below the sidebar header, above the
+tabs. With top tabs, it appears just before the action icons and makes room
+by compressing the tab strip. Click a result or press Enter to open the first
+match. Use the clear button to restore all tabs, or Escape to close search.
+
+### Automatic sessions
+
+Every tab belongs to a session. On first launch, Orbit creates a session with
+an automatic name and saves tabs, titles, addresses, tab order, groups, and
+collapsed groups as you browse. The last-used session opens at startup.
+
+Open **Sessions** to see your current session and saved workspaces. Edit the
+current name and click **Rename** to give it a meaningful name. **New session**
+starts a separate workspace with a blank tab and an automatic name. **Switch to
+session** saves your current workspace and replaces its tabs with the selected
+session; inactive sessions retain their saved tabs until you use them again.
+
+**Delete** removes a session. Deleting the current session starts a new blank
+session, so the browser always has one. A session already open in another
+window is focused instead of opening a competing copy. The save indicator
+reports background saves and any write errors. Existing saved sessions and
+legacy open tabs are preserved when upgrading.
+
 ### Basic Navigation
 - Enter URLs or search terms in the address bar
 - Use the back button to navigate to previous pages

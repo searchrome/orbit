@@ -44,5 +44,24 @@ class WorkspaceStore {
     });
   }
   delete(id) { return this.update(items => items.filter(item => item.id !== id)); }
+  rename(id, value) {
+    const name = String(value || '').trim().slice(0, 80);
+    if (!name) throw new Error('Give your session a name.');
+    return this.update(items => {
+      const item = items.find(item => item.id === id);
+      if (!item) throw new Error('Session no longer exists.');
+      item.name = name;
+      return items;
+    });
+  }
+  markOpened(id) {
+    return this.update(items => {
+      const item = items.find(item => item.id === id);
+      if (!item) throw new Error('Session no longer exists.');
+      const latest = Math.max(0, ...items.map(entry => Date.parse(entry.lastOpenedAt || '') || 0));
+      item.lastOpenedAt = new Date(Math.max(Date.now(), latest + 1)).toISOString();
+      return items;
+    });
+  }
 }
 module.exports = WorkspaceStore;

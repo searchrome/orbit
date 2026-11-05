@@ -480,7 +480,7 @@ function sanitizeBrowserSession(snapshot) {
   const groups = new Set(tabs.map(tab => tab.group).filter(Boolean));
   const collapsedGroups = Array.isArray(snapshot.collapsedGroups)
     ? [...new Set(snapshot.collapsedGroups.filter(group => groups.has(group)))] : [];
-  return { tabs, activeTabId, collapsedGroups };
+  return { tabs, activeTabId, collapsedGroups, ...(typeof snapshot.sessionId === 'string' ? {sessionId: snapshot.sessionId} : {}) };
 }
 
 async function writeBrowserSession(record) {
@@ -654,10 +654,15 @@ function createWindow(namedSession = null) {
   });
 
 
+  shellWindow.on('focus', () => {
+    void automaticSessions.focus(shellContentsId).catch(error => console.warn('[Sessions] Could not remember active session:', error.message));
+  });
+
   shellWindow.on('closed', () => {
     browserWindows.delete(shellWindow);
     windowStartupSessions.delete(shellContentsId);
     windowSessionSnapshots.delete(shellContentsId);
+    automaticSessions.release(shellContentsId);
     if (mainWindow === shellWindow) mainWindow = [...browserWindows][0] || null;
     if (browserWindows.size) return;
     if (quitController.requested) {
@@ -737,45 +742,87 @@ const workspaceStore = new WorkspaceStore(path.join(app.getPath('userData'), 'na
   clean.tabs = clean.tabs.filter(tab => /^(https?:\/\/|about:blank$|browser:\/\/view\/)/i.test(tab.url));
   return clean;
 });
+const AutomaticSessions = require('./automatic-sessions');
+const automaticSessions = new AutomaticSessions(workspaceStore);
+
+function focusSessionWindow(result) {
+  if (result?.focusWindowId === undefined) return result;
+  const target = [...browserWindows].find(window => window.webContents.id === result.focusWindowId);
+  if (target && !target.isDestroyed()) { target.show(); target.focus(); }
+  return {alreadyOpen: true};
+}
+
+async function persistWindowSession(windowId, snapshot) {
+  const record = await automaticSessions.save(windowId, snapshot);
+  if (!record) return null; // Ignore stale writes sent before a switch or deletion.
+  const journal = {...record.session, sessionId: record.id};
+  windowSessionSnapshots.set(windowId, journal);
+  const owner = [...browserWindows].find(window => window.webContents.id === windowId);
+  if (owner === mainWindow) await saveRunningBrowserSession(journal);
+  return record;
+}
+
 for (const [channel, handler] of Object.entries({
   'workspace-list': () => workspaceStore.list(),
-  'workspace-save': payload => workspaceStore.save(payload),
-  'workspace-delete': payload => workspaceStore.delete(payload?.id),
+  'workspace-autosave': (payload, event) => persistWindowSession(event.sender.id, payload),
+  'workspace-switch': async (payload, event) => {
+    const result = await automaticSessions.change(event.sender.id, payload);
+    if (result.workspace) {
+      const journal = {...result.workspace.session, sessionId: result.workspace.id};
+      windowSessionSnapshots.set(event.sender.id, journal);
+      if (event.sender === mainWindow?.webContents) await saveRunningBrowserSession(journal);
+    }
+    return focusSessionWindow(result);
+  },
+  'workspace-rename': (payload, event) => automaticSessions.rename(event.sender.id, payload?.name),
+  'workspace-delete': async (payload, event) => {
+    const result = await automaticSessions.delete(event.sender.id, payload?.id);
+    if (result.workspace) {
+      const journal = {...result.workspace.session, sessionId: result.workspace.id};
+      windowSessionSnapshots.set(event.sender.id, journal);
+      if (event.sender === mainWindow?.webContents) await saveRunningBrowserSession(journal);
+    }
+    return result;
+  },
   'workspace-open-window': async payload => {
     const saved = (await workspaceStore.list()).find(item => item.id === payload?.id);
     if (!saved) throw new Error('Session no longer exists.');
-    createWindow(saved.session);
-    return { opened: true };
+    const owner = automaticSessions.owner(saved.id);
+    if (owner !== undefined) return focusSessionWindow({focusWindowId: owner});
+    createWindow({sessionId: saved.id});
+    return {opened: true};
   }
 })) {
   ipcMain.handle(channel, (event, payload) => {
     if (!isHostBrowserEvent(event)) throw new Error('Sessions are restricted to browser windows.');
-    return handler(payload);
+    return handler(payload, event);
   });
 }
 
-ipcMain.handle('get-startup-session', (event) => {
-  if (isHostBrowserEvent(event) && windowStartupSessions.has(event.sender.id)) {
-    return { namedSession: true, interrupted: false, session: windowStartupSessions.get(event.sender.id) };
+ipcMain.handle('get-startup-session', async event => {
+  if (!isHostBrowserEvent(event)) return {interrupted: false, session: {tabs: [], activeTabId: null}};
+  const requested = windowStartupSessions.get(event.sender.id);
+  const result = await automaticSessions.start(event.sender.id, {
+    id: requested?.sessionId,
+    fallback: startupRecoverySession || startupCleanSession,
+    interrupted: !!startupRecoverySession
+  });
+  if (!result.workspace) {
+    const focused = focusSessionWindow(result);
+    BrowserWindow.fromWebContents(event.sender)?.destroy();
+    return focused;
   }
-  // `event.sender === mainWindow.webContents` is the authoritative host
-  // identity. getType() is not stable across Electron's startup lifecycle and
-  // caused recovery IPC to be rejected on the browser's own renderer.
-  if (!mainWindow || mainWindow.isDestroyed() || event?.sender !== mainWindow.webContents) {
-    return { interrupted: false, session: { tabs: [], activeTabId: null } };
-  }
-
-  return {
-    interrupted: !!startupRecoverySession,
-    session: startupRecoverySession || startupCleanSession || { tabs: [], activeTabId: null }
-  };
+  const journal = {...result.workspace.session, sessionId: result.workspace.id};
+  windowSessionSnapshots.set(event.sender.id, journal);
+  if (event.sender === mainWindow?.webContents) await saveRunningBrowserSession(journal);
+  return {...result, session: result.workspace.session, namedSession: true};
 });
 
 ipcMain.on('browser-session-state', (event, snapshot) => {
   if (!isHostBrowserEvent(event)) return;
-  const session = sanitizeBrowserSession(snapshot);
-  windowSessionSnapshots.set(event.sender.id, session);
-  if (event.sender === mainWindow?.webContents) void saveRunningBrowserSession(session);
+  void persistWindowSession(event.sender.id, snapshot).catch(error => {
+    console.warn('[Sessions] Autosave failed:', error.message);
+  });
 });
 
 // IPC handler to save history
@@ -1832,6 +1879,8 @@ ipcMain.on('open-tabs-saved', (event, snapshot) => {
     console.warn('[Orbit] Previous window-close save failed:', error?.message || error);
   }).then(async () => {
     if (!closingWindow || closingWindow.isDestroyed()) return;
+    const record = await persistWindowSession(event.sender.id, snapshot);
+    snapshot = record ? {...record.session, sessionId: record.id} : (windowSessionSnapshots.get(event.sender.id) || snapshot);
     windowSessionSnapshots.set(event.sender.id, sanitizeBrowserSession(snapshot));
     if (browserWindows.size === 1) {
       await markBrowserSessionClean(snapshot);
@@ -1886,6 +1935,11 @@ app.whenReady().then(async () => {
   console.log(`[Main] AI backend: ${backendLabel}`);
   startupRecoverySession = await loadInterruptedBrowserSession();
   startupCleanSession = startupRecoverySession ? null : await loadCleanBrowserSession();
+  if (!startupRecoverySession && !startupCleanSession) {
+    const history = await loadHistoryFromFile();
+    const tabs = history.filter(tab => tab.state === 'open');
+    if (tabs.length) startupCleanSession = sanitizeBrowserSession({tabs});
+  }
   if (startupRecoverySession?.tabs.length) {
     console.warn(`[Main] Recovering ${startupRecoverySession.tabs.length} tab(s) after an unexpected exit.`);
   }

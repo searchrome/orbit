@@ -4,7 +4,7 @@ const path = require('node:path');
 function loadRenderer() {
     const source = fs.readFileSync(path.join(__dirname, '../../renderer.js'), 'utf8');
     const transformed = source
-        .replace("import WorkspacePanel from './workspace-panel.js';", "const WorkspacePanel = class {};")
+        .replace("import WorkspacePanel from './workspace-panel.js';", "const WorkspacePanel = class { initialize() { this.ready = true; } autosave() { return Promise.resolve(); } updateSessionStatus() {} };")
         .replace("import TabManager from './tab-manager.js';", "const TabManager = require('__tab_manager__');")
         .replace("import Summarizer from './summarizer.js';", "const Summarizer = require('__summarizer__');")
         .replace("import HistoryManager from './history-manager.js'; // Import HistoryManager", "const HistoryManager = require('__history_manager__');")
@@ -79,6 +79,8 @@ function loadRenderer() {
                 return activeTab ? activeTab.webview : null;
             });
             this.getTabById = jest.fn((tabId) => this.tabs.find((tab) => tab.id === tabId) || null);
+            this.replaceSession = jest.fn(snapshot => snapshot.tabs.forEach(tab => this.createTab(tab.url, {title: tab.title})));
+            this.getSessionSnapshot = jest.fn(() => ({tabs: this.tabs, activeTabId: this.activeTabId}));
             this.updateTabTitle = jest.fn();
             this.updateTabFavicon = jest.fn();
             this.reloadTab = jest.fn();
@@ -225,6 +227,7 @@ describe('Renderer navigation controls', () => {
 
     beforeEach(() => {
         document.body.innerHTML = `
+            <div id="workspace-bar"></div><div id="controls"></div>
             <input id="url-input" />
             <button id="toggle-network-btn"><span class="toolbar-btn__state">On</span></button>
             <button id="toggle-js-btn"><span class="toolbar-btn__state">On</span></button>
@@ -256,11 +259,9 @@ describe('Renderer navigation controls', () => {
             send: jest.fn(),
             sendToHost: jest.fn(),
             on: jest.fn((channel, listener) => { listeners[channel] = listener; }),
-            invoke: jest.fn().mockResolvedValue({
-                javascriptDisabled: false,
-                cacheEnabled: true,
-                domainBlockingEnabled: true
-            })
+            invoke: jest.fn().mockImplementation(channel => Promise.resolve(channel === 'get-startup-session'
+                ? {workspace: {id: 'session-1'}, session: {tabs: [{url: 'about:blank', title: 'New Tab'}]}}
+                : {javascriptDisabled: false, cacheEnabled: true, domainBlockingEnabled: true}))
         };
     });
 

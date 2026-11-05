@@ -62,6 +62,15 @@ function loadPreload({ pathname, argv = [] } = {}) {
 }
 
 describe('preload planner gating', () => {
+    test.each(['workspace-autosave', 'workspace-switch', 'workspace-rename', 'workspace-delete'])(
+        'restricts automatic session IPC %s to the host renderer', async channel => {
+            const host = loadPreload({pathname: '/app/index.html'});
+            await expect(host.window.electronAPI.invoke(channel, {})).resolves.toBe('planner-result');
+            const guest = loadPreload({pathname: '/app/page.html'});
+            await expect(guest.window.electronAPI.invoke(channel, {})).rejects.toThrow(`${channel} is restricted to the host browser window.`);
+            expect(guest.ipcRenderer.invoke).not.toHaveBeenCalled();
+        }
+    );
     test('allows the host browser renderer to invoke the assistant planner', async () => {
         const { window, ipcRenderer } = loadPreload({
             pathname: '/Users/sozay/workspace/browser/index.html'

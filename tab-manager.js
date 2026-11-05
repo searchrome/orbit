@@ -398,8 +398,8 @@ class TabManager {
         if (!this.tabSearchQuery) return true;
         let address = String(tab.url || '');
         try { address = decodeURI(address); } catch { /* Keep malformed addresses searchable as written. */ }
-        return String(tab.title || '').toLocaleLowerCase().includes(this.tabSearchQuery)
-            || address.toLocaleLowerCase().includes(this.tabSearchQuery);
+        const text = `${tab.title || ''}\n${address}`.toLocaleLowerCase();
+        return this.tabSearchQuery.split(/\s+/).every(term => text.includes(term));
     }
 
     _renderGroupHeaders() {
@@ -566,6 +566,7 @@ class TabManager {
     }
 
     _emitSessionChange() {
+        if (this.replacingSession) return;
         this._renderGroupHeaders();
         let placeholder = document.getElementById('collapsed-groups-placeholder');
         if (!this.activeTabId && this.tabs.some(tab => !tab.hidden && this.collapsedGroups.has(tab.group))) {
@@ -580,6 +581,42 @@ class TabManager {
         const event = createWindowCustomEvent('tab-session-changed', this.getSessionSnapshot());
         if (event) {
             window.dispatchEvent(event);
+        }
+    }
+
+    replaceSession(snapshot, {interrupted = false} = {}) {
+        this.replacingSession = true;
+        try {
+            for (const tab of this.tabs) {
+                window.dispatchEvent(createWindowCustomEvent('tab-closed', {tabId: tab.id, tab}));
+                if (tab.trackHistory !== false) this.historyManager.markAsClosed(tab.url);
+                tab.suspended = true;
+                const view = tab.webview;
+                tab.webview = null;
+                view?.remove?.();
+                tab.element?.remove?.();
+            }
+            this.tabs = [];
+            this.activeTabId = null;
+            this.collapsedGroups = new Set();
+            this._groupRenderKey = null;
+            this._clearErrorOverlay();
+            const entries = snapshot?.tabs?.length ? snapshot.tabs : [{id: 'initial', url: 'about:blank', title: 'New Tab'}];
+            const ids = new Map();
+            for (const entry of entries) {
+                const paused = entry.crashed || (interrupted && entry.id === snapshot?.activeTabId);
+                const id = this.createTab(entry.url, {title: entry.title, activate: false, deferLoad: !paused, recoveryPaused: !!paused});
+                ids.set(entry.id, id);
+                if (entry.group) this.setTabGroup(id, entry.group);
+            }
+            this.restoreCollapsedGroups(snapshot?.collapsedGroups || []);
+            const desired = this.getTabById(ids.get(snapshot?.activeTabId));
+            const active = desired && !this.collapsedGroups.has(desired.group) ? desired
+                : this.tabs.find(tab => !this.collapsedGroups.has(tab.group));
+            if (active) this.switchToTab(active.id);
+        } finally {
+            this.replacingSession = false;
+            this._emitSessionChange();
         }
     }
 
@@ -1009,6 +1046,7 @@ class TabManager {
         
         // Update tab title when page title changes
         on('page-title-updated', (e) => {
+            if (tab.crashed && tab.recoveryUrl) return;
             this.updateTabTitle(tab.id, e.title);
         });
         

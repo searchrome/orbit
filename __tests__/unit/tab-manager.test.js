@@ -565,6 +565,52 @@ describe('TabManager', () => {
     expect(tabManager.getTabById(id).element.hidden).toBe(false);
   });
 
+  test('combines title and website terms across unloaded tabs without resuming them', () => {
+    const match = tabManager.createTab('https://github.com/searchrome/orbit', {title: 'Orbit release notes'});
+    const other = tabManager.createTab('https://example.com/notes', {title: 'Orbit release notes'});
+    tabManager.setTabGroup(match, 'Saved');
+    tabManager.setTabGroup(other, 'Saved');
+    tabManager.toggleTabGroup('Saved');
+    tabManager.setTabSearchQuery('  GITHUB.COM   release  ');
+    expect(tabManager.getTabById(match).element.hidden).toBe(false);
+    expect(tabManager.getTabById(other).element.hidden).toBe(true);
+    expect(tabManager.getTabById(match).webview).toBeNull();
+    expect(tabManager.getTabById(other).webview).toBeNull();
+  });
+
+  test('replaces the workspace without merging old tabs or exposing partially restored snapshots', () => {
+    tabManager.createTab('https://old.example.com', {title: 'Old'});
+    const states = [];
+    const onChange = event => states.push(event.detail);
+    window.addEventListener('tab-session-changed', onChange);
+    try {
+      tabManager.replaceSession({tabs: [
+        {id: 'one', title: 'First', url: 'https://new.example.com/one', group: 'Work'},
+        {id: 'two', title: 'Second', url: 'https://new.example.com/two', group: 'Later'}
+      ], activeTabId: 'one', collapsedGroups: ['Later']});
+      expect(tabManager.tabs.map(tab => tab.url)).toEqual(['https://new.example.com/one', 'https://new.example.com/two']);
+      expect(tabManager.getActiveTab().title).toBe('First');
+      expect(tabManager.tabs[1].webview).toBeNull();
+      expect(states).toHaveLength(1);
+      expect(states[0].tabs).toHaveLength(2);
+      expect(states[0].collapsedGroups).toEqual(['Later']);
+    } finally { window.removeEventListener('tab-session-changed', onChange); }
+  });
+
+  test('restores the saved active tab by ID when multiple tabs have the same address and pauses interrupted pages', () => {
+    tabManager.replaceSession({tabs: [
+      {id: 'one', title: 'First', url: 'https://example.com'},
+      {id: 'two', title: 'Second', url: 'https://example.com'}
+    ], activeTabId: 'two'}, {interrupted: true});
+    expect(tabManager.getActiveTab().title).toBe('Second');
+    expect(tabManager.getActiveTab().crashed).toBe(true);
+    const placeholderTitle = new Event('page-title-updated');
+    placeholderTitle.title = 'Page paused after crash';
+    tabManager.getActiveTab().webview.dispatchEvent(placeholderTitle);
+    expect(tabManager.getActiveTab().title).toBe('Second');
+    expect(tabManager.tabs[0].webview.isConnected).toBe(false);
+  });
+
   test('collapsing a group removes its live page views while preserving tab metadata', () => {
     const a = tabManager.createTab('https://example.com/a', {title: 'Alpha'});
     const b = tabManager.createTab('https://example.com/b', {title: 'Beta'});

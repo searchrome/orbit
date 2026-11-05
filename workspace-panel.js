@@ -4,7 +4,10 @@ export default class WorkspacePanel {
     this.tabs = tabs;
     this.expandedSessions = new Set();
     this.sessions = [];
-    this.selectedSessionId = '';
+    this.currentSession = null;
+    this.ready = false;
+    this.transitioning = false;
+    this.saveState = 'Starting session…';
     this.groupsDialog = document.getElementById('groups-dialog');
     this.screen = 'sessions';
     this.bindSidebarResize();
@@ -25,20 +28,15 @@ export default class WorkspacePanel {
     document.getElementById('groups-btn').addEventListener('click', () => this.openGroups());
     document.getElementById('groups-close').addEventListener('click', () => this.groupsDialog.close());
     window.addEventListener('tab-groups-changed', () => { if (this.groupsDialog.open) this.renderGroups(); });
-    document.getElementById('session-save-target').addEventListener('change', event => this.selectSession(event.target.value));
-    document.getElementById('session-save-form').addEventListener('submit', async event => {
+    document.getElementById('session-new-btn').addEventListener('click', () => this.run(() => this.switchSession()));
+    document.getElementById('session-rename-form').addEventListener('submit', event => {
       event.preventDefault();
-      await this.run(async () => {
-        const targetId = document.getElementById('session-save-target').value;
-        const saved = await window.electronAPI.invoke('workspace-save', {
-          ...(targetId ? { id: targetId } : {}),
-          name: document.getElementById('session-name').value,
-          session: tabs.getSessionSnapshot()
-        });
-        this.selectedSessionId = targetId || saved?.[0]?.id || '';
-        if (this.selectedSessionId) this.expandedSessions.add(this.selectedSessionId);
+      void this.run(async () => {
+        if (!this.ready || this.transitioning) return;
+        const record = await window.electronAPI.invoke('workspace-rename', {name: document.getElementById('session-name').value});
+        this.setCurrentSession(record);
         await this.render();
-        this.status(targetId ? 'Session updated with the current tabs and groups.' : 'Session created.');
+        this.status('Session renamed. Changes are saved automatically.');
       });
     });
     window.addEventListener('tab-group-request', event => {
@@ -130,6 +128,13 @@ export default class WorkspacePanel {
       if (event.key === 'Escape') {
         event.preventDefault();
         setOpen(false);
+      } else if (event.key === 'Enter' && input.value.trim()) {
+        event.preventDefault();
+        const match = this.tabs.tabs.find(tab => !tab.hidden && tab.element && !tab.element.hidden);
+        if (match) {
+          this.tabs.switchToTab(match.id);
+          setOpen(false);
+        }
       }
     });
     document.getElementById('tab-search-clear').addEventListener('click', () => { clear(); input.focus(); });
@@ -175,18 +180,93 @@ export default class WorkspacePanel {
     handle.addEventListener('dblclick', () => { setWidth(230); save(); });
     window.addEventListener('resize', () => setWidth(this.sidebarWidth));
   }
-  selectSession(id) {
-    this.selectedSessionId = this.sessions.some(session => session.id === id) ? id : '';
-    const selected = this.sessions.find(session => session.id === this.selectedSessionId);
-    document.getElementById('session-save-target').value = this.selectedSessionId;
-    document.getElementById('session-name').value = selected?.name || '';
-    document.getElementById('session-save-btn').textContent = selected ? 'Update session' : 'Create session';
-    document.getElementById('session-save-hint').textContent = selected
-      ? 'Replace the selected session with the current tabs and groups.'
-      : 'Create a session from the current tabs and groups.';
-    document.querySelectorAll('.saved-session').forEach(row => {
-      row.classList.toggle('saved-session--selected', row.dataset.sessionId === this.selectedSessionId);
-    });
+  initialize(record) {
+    if (!record?.id) throw new Error('Could not start a saved session. Reopen the browser to retry.');
+    this.ready = true;
+    this.setCurrentSession(record);
+  }
+  setCurrentSession(record) {
+    const changed = this.currentSession?.id !== record.id;
+    this.currentSession = record;
+    if (changed || document.activeElement !== document.getElementById('session-name')) {
+      document.getElementById('session-name').value = record.name;
+    }
+    this.saveState = 'All changes saved automatically';
+    this.updateSessionStatus();
+  }
+  updateSessionStatus() {
+    document.getElementById('session-autosave-status').textContent = this.saveState;
+    const button = document.getElementById('sessions-btn');
+    button.title = this.currentSession ? `Sessions · ${this.currentSession.name} · ${this.saveState}` : 'Sessions';
+    document.getElementById('session-new-btn').disabled = !this.ready || this.transitioning;
+    document.getElementById('session-rename-btn').disabled = !this.ready || this.transitioning;
+  }
+  getCurrentSnapshot() {
+    return {...this.tabs.getSessionSnapshot(), sessionId: this.currentSession?.id};
+  }
+  async autosave() {
+    if (!this.ready || this.transitioning) return;
+    const id = this.currentSession.id;
+    this.saveState = 'Saving changes…';
+    this.updateSessionStatus();
+    try {
+      const record = await window.electronAPI.invoke('workspace-autosave', this.getCurrentSnapshot());
+      if (this.transitioning || this.currentSession.id !== id) return;
+      if (!record) throw new Error('The active session changed. Reopen the browser to retry.');
+      this.setCurrentSession(record);
+      if (this.dialog.open) await this.render();
+    } catch (error) {
+      if (!this.transitioning && this.currentSession.id === id) {
+        this.saveState = `Could not save changes: ${error.message || error}`;
+        this.updateSessionStatus();
+      }
+      throw error;
+    }
+  }
+  async changeSession(operation) {
+    if (!this.ready || this.transitioning) return;
+    this.transitioning = true;
+    document.getElementById('workspace-bar').inert = true;
+    document.getElementById('controls').inert = true;
+    document.getElementById('content').inert = true;
+    this.updateSessionStatus();
+    window.dispatchEvent(new Event('workspace-session-changing'));
+    try {
+      const result = await operation();
+      if (result.workspace) {
+        if (result.workspace.id !== this.currentSession.id) {
+          document.getElementById('tab-search-input').value = '';
+          this.tabs.setTabSearchQuery('');
+          this.tabs.replaceSession(result.workspace.session);
+        }
+        this.setCurrentSession(result.workspace);
+      }
+      this.transitioning = false;
+      await this.render();
+      return result;
+    } finally {
+      this.transitioning = false;
+      document.getElementById('workspace-bar').inert = false;
+      document.getElementById('controls').inert = false;
+      document.getElementById('content').inert = false;
+      this.updateSessionStatus();
+      window.dispatchEvent(new Event('workspace-session-ready'));
+    }
+  }
+  async switchSession(id) {
+    if (id === this.currentSession?.id) { this.dialog.close(); return; }
+    const result = await this.changeSession(() => window.electronAPI.invoke('workspace-switch', {id, snapshot: this.getCurrentSnapshot()}));
+    if (!result) return;
+    if (result.workspace && !id) {
+      this.status('New session created. Changes are saved automatically.');
+      document.getElementById('session-name').focus();
+      document.getElementById('session-name').select();
+    } else this.dialog.close();
+  }
+  async deleteSession(id) {
+    await this.changeSession(() => window.electronAPI.invoke('workspace-delete', {id}));
+    this.expandedSessions.delete(id);
+    this.status('Session deleted.');
   }
   renderSessionPages(session) {
     const pages = document.createElement('div');
@@ -215,12 +295,6 @@ export default class WorkspacePanel {
   async render() {
     const sessions = await window.electronAPI.invoke('workspace-list');
     this.sessions = sessions;
-    const target = document.getElementById('session-save-target');
-    target.replaceChildren();
-    const createNew = document.createElement('option'); createNew.value = ''; createNew.textContent = 'New session…'; target.append(createNew);
-    for (const session of sessions) {
-      const option = document.createElement('option'); option.value = session.id; option.textContent = session.name; target.append(option);
-    }
     const list = document.getElementById('saved-session-list'); list.replaceChildren();
     if (!sessions.length) list.textContent = 'Your saved sessions will appear here.';
     for (const session of sessions) {
@@ -233,44 +307,42 @@ export default class WorkspacePanel {
       info.setAttribute('aria-expanded', String(expanded));
       info.setAttribute('aria-controls', pages.id);
       info.addEventListener('click', () => {
-        this.selectSession(session.id);
         const expand = pages.hidden;
         pages.hidden = !expand;
         info.setAttribute('aria-expanded', String(expand));
         if (expand) this.expandedSessions.add(session.id); else this.expandedSessions.delete(session.id);
       });
       const name = document.createElement('strong'); name.textContent = session.name;
-      const count = document.createElement('small'); count.textContent = `${session.session.tabs.length} tabs · ${new Date(session.updatedAt).toLocaleDateString()}`;
+      const count = document.createElement('small');
+      const total = session.session.tabs.length;
+      count.textContent = `${total} tab${total === 1 ? '' : 's'} · ${new Date(session.updatedAt).toLocaleDateString()}`;
       const description = document.createElement('span'); description.append(name, count);
       const chevron = document.createElement('span'); chevron.className = 'saved-session-chevron'; chevron.textContent = '›'; chevron.setAttribute('aria-hidden', 'true');
       info.append(chevron, description); summary.append(info);
       const actions = document.createElement('div'); actions.className = 'saved-session-actions';
-      for (const [label, target] of [['Open here', 'current'], ['New window', 'new']]) {
-        const button = document.createElement('button'); button.className = 'toolbar-btn'; button.textContent = label;
-        button.addEventListener('click', () => this.run(async () => {
-          if (target === 'new') await window.electronAPI.invoke('workspace-open-window', { id: session.id });
-          else {
-            let activeId;
-            for (const tab of session.session.tabs) {
-              const id = this.tabs.createTab(tab.url, { title: tab.title, activate: false, deferLoad: true });
-              if (tab.group) this.tabs.setTabGroup(id, tab.group);
-              if (tab.id === session.session.activeTabId || !activeId) activeId = id;
-            }
-            if (activeId) this.tabs.switchToTab(activeId);
-            this.tabs.restoreCollapsedGroups(session.session.collapsedGroups || []);
-          }
-          this.selectSession(session.id);
-          this.dialog.close();
-        })); actions.append(button);
+      const current = session.id === this.currentSession?.id;
+      row.classList.toggle('saved-session--selected', current);
+      if (current) {
+        const badge = document.createElement('span'); badge.className = 'session-current-badge'; badge.textContent = 'Current';
+        description.append(badge);
       }
+      const open = document.createElement('button'); open.type = 'button'; open.className = 'toolbar-btn';
+      open.textContent = current ? 'Current session' : 'Switch to session'; open.disabled = current || this.transitioning;
+      open.setAttribute('aria-label', current ? `Current session ${session.name}` : `Switch to session ${session.name}`);
+      open.addEventListener('click', () => this.run(() => this.switchSession(session.id)));
+      actions.append(open);
+      const newWindow = document.createElement('button'); newWindow.type = 'button'; newWindow.className = 'toolbar-btn';
+      newWindow.textContent = 'New window'; newWindow.disabled = current || this.transitioning;
+      newWindow.addEventListener('click', () => this.run(async () => {
+        await window.electronAPI.invoke('workspace-open-window', {id: session.id});
+      }));
+      actions.append(newWindow);
       const remove = document.createElement('button'); remove.className = 'toolbar-btn'; remove.textContent = 'Delete';
       remove.setAttribute('aria-label', `Delete session ${session.name}`);
-      remove.addEventListener('click', () => this.run(async () => {
-        await window.electronAPI.invoke('workspace-delete', { id: session.id });
-        this.expandedSessions.delete(session.id);
-        await this.render();
-      })); actions.append(remove); summary.append(actions); row.append(summary, pages); list.append(row);
+      remove.disabled = this.transitioning;
+      remove.addEventListener('click', () => this.run(() => this.deleteSession(session.id)));
+      actions.append(remove); summary.append(actions); row.append(summary, pages); list.append(row);
     }
-    this.selectSession(this.selectedSessionId);
+    this.updateSessionStatus();
   }
 }
