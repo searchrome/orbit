@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <!-- https://developer.mozilla.org/en-US/docs/Web/HTTP/CSP -->
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self' data:; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: *;">
+    <meta http-equiv="X-Content-Security-Policy" content="default-src 'self' data:; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: *;">
+    <title>Orbit Browser</title>
+    <link rel="icon" href="icons/orbit.svg">
+    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="./node_modules/@xterm/xterm/css/xterm.css">
+</head>
+<body>
+    <div id="workspace-bar">
+        <img src="icons/orbit.svg" width="26" height="26" alt="">
+        <span class="workspace-brand">Orbit</span>
+        <div id="tab-bar" aria-label="Browser tabs">
+            <button id="new-tab-btn" type="button" aria-label="New tab" title="New tab">+</button>
+        </div>
+        <div id="tab-search" class="tab-search" hidden>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 4 4"/></svg>
+            <input id="tab-search-input" type="search" placeholder="Search tabs…" aria-label="Search open tabs by title or address" aria-controls="tab-bar" autocomplete="off" spellcheck="false">
+            <button id="tab-search-clear" type="button" aria-label="Clear tab search" title="Clear search">×</button>
+            <span id="tab-search-status" class="visually-hidden" role="status"></span>
+        </div>
+        <div class="workspace-actions">
+            <button id="tab-layout-btn" class="toolbar-btn workspace-icon-btn" type="button" aria-pressed="false" aria-label="Switch to vertical tabs" title="Switch to vertical tabs">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="3"/><path d="M9 4v16M5.5 8h1M5.5 12h1M5.5 16h1"/></svg>
+            </button>
+            <button id="tab-search-btn" class="toolbar-btn workspace-icon-btn" type="button" aria-label="Search tabs" title="Search tabs" aria-expanded="false" aria-controls="tab-search">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 4 4"/></svg>
+            </button>
+            <button id="groups-btn" class="toolbar-btn workspace-icon-btn" type="button" aria-label="Tab groups" title="Tab groups">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><rect x="3" y="4" width="7" height="7" rx="2"/><rect x="14" y="4" width="7" height="7" rx="2"/><rect x="3" y="15" width="18" height="5" rx="2"/></svg>
+            </button>
+            <button id="sessions-btn" class="toolbar-btn workspace-icon-btn" type="button" aria-label="Sessions" title="Sessions">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><rect x="6" y="7" width="15" height="14" rx="3"/><path d="M17 7V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h1M6 11h15"/></svg>
+            </button>
+        </div>
+    </div>
+    <div id="tab-sidebar-resizer" role="separator" tabindex="0" aria-label="Resize tab sidebar" aria-orientation="vertical" aria-valuemin="180" aria-valuemax="560" aria-valuenow="230" title="Drag to resize · Arrow keys to adjust"></div>
+    <div id="controls">
+        <button id="back-btn" class="toolbar-btn toolbar-btn--icon-only" disabled aria-label="Back">‹</button>
+        <div class="address-bar">
+            <input type="text" id="url-input" placeholder="https://news.ycombinator.com/front">
+            <button id="bookmark-btn" class="toolbar-btn toolbar-btn--bookmark toolbar-btn--icon-only" type="button" aria-label="Add current page to bookmarks" aria-pressed="false" title="Add bookmark">
+                <span class="toolbar-btn__icon" aria-hidden="true">★</span>
+            </button>
+        </div>
+        <button id="toggle-network-btn" class="toolbar-btn toolbar-btn--toggle" type="button" aria-pressed="false" title="Network for the current tab">
+            <span class="toolbar-btn__icon" aria-hidden="true">⌁</span><span class="toolbar-btn__label">Network</span><span class="toolbar-btn__state">On</span>
+        </button>
+        <button id="toggle-js-btn" class="toolbar-btn toolbar-btn--toggle" type="button" aria-pressed="false" title="JavaScript across browser tabs">
+            <span class="toolbar-btn__icon" aria-hidden="true">{ }</span><span class="toolbar-btn__label">JS</span><span class="toolbar-btn__state">On</span>
+        </button>
+        <button id="terminal-btn" class="toolbar-btn toolbar-btn--primary" aria-label="Open OpenCode terminal">
+            <span class="toolbar-btn__icon" aria-hidden="true">⌘</span>
+            <span class="toolbar-btn__label">Terminal</span>
+        </button>
+        <button id="artifacts-btn" class="toolbar-btn toolbar-btn--artifact" aria-label="Open created artifacts">
+            <span class="toolbar-btn__icon" aria-hidden="true">▧</span>
+            <span class="toolbar-btn__label">Artifacts</span>
+        </button>
+        <button id="bookmarks-btn" class="toolbar-btn toolbar-btn--bookmarks" type="button" aria-label="Open bookmarks">
+            <span class="toolbar-btn__icon" aria-hidden="true">★</span>
+            <span class="toolbar-btn__label">Bookmarks</span>
+        </button>
+        <details id="toolbar-more-menu" class="toolbar-more">
+            <summary class="toolbar-btn toolbar-btn--more" aria-label="More browser controls">
+                <span class="toolbar-btn__label">More</span>
+                <span class="toolbar-btn__chevron" aria-hidden="true">⌄</span>
+            </summary>
+            <div class="toolbar-more__menu" role="group" aria-label="More browser controls">
+                <div class="toolbar-more__section-label">Page</div>
+                <button id="summarize-btn" class="toolbar-btn toolbar-btn--menu">
+                    <span class="toolbar-btn__icon" aria-hidden="true">✦</span>
+                    <span class="toolbar-btn__label">Summarize</span>
+                </button>
+                <button id="cleanup-btn" class="toolbar-btn toolbar-btn--menu">
+                    <span class="toolbar-btn__icon" aria-hidden="true">🧹</span>
+                    <span class="toolbar-btn__label">Cleanup</span>
+                </button>
+                <button id="cast-btn" class="toolbar-btn toolbar-btn--menu" type="button">
+                    <span class="toolbar-btn__icon" aria-hidden="true">📡</span>
+                    <span class="toolbar-btn__label">Cast to TV</span>
+                </button>
+                <div class="toolbar-more__separator" role="separator"></div>
+                <div class="toolbar-more__section-label">Browser</div>
+                <button id="toggle-cache-btn" class="toolbar-btn toolbar-btn--toggle toolbar-btn--menu">
+                    <span class="toolbar-btn__icon" aria-hidden="true">💾</span>
+                    <span class="toolbar-btn__label">Cache</span>
+                    <span class="toolbar-btn__state">On</span>
+                </button>
+                <button id="toggle-blocklist-btn" class="toolbar-btn toolbar-btn--toggle toolbar-btn--menu">
+                    <span class="toolbar-btn__icon" aria-hidden="true">🛡️</span>
+                    <span class="toolbar-btn__label">Blocklist</span>
+                    <span class="toolbar-btn__state">Off</span>
+                </button>
+                <div class="toolbar-more__separator" role="separator"></div>
+                <button id="settings-btn" class="toolbar-btn toolbar-btn--menu" type="button">
+                    <span class="toolbar-btn__icon" aria-hidden="true">⚙</span>
+                    <span class="toolbar-btn__label">Settings</span>
+                </button>
+            </div>
+        </details>
+    </div>
+    <div id="network-activity-bar">
+        <div id="network-activity-fill"></div> <!-- Inner div for fill visualization -->
+    </div>
+    <div id="content">
+        <!-- Webview elements will be dynamically added here by the TabManager -->
+        <div id="error-message-overlay" class="error-overlay"></div> <!-- Added error overlay -->
+    </div>
+    <section id="download-status-bar" class="download-status" aria-label="Downloads" aria-live="polite" hidden>
+        <div class="download-status__header">
+            <span class="download-status__title">Downloads</span>
+            <button id="clear-downloads-btn" class="download-status__clear" type="button" aria-label="Clear finished downloads">Clear</button>
+        </div>
+        <div id="download-status-list" class="download-status__list"></div>
+    </section>
+    <div id="summary-panel" class="summary-panel hidden"> <!-- Added Summary Panel -->
+        <button id="close-summary-btn" class="close-btn" type="button" aria-label="Close summary">×</button>
+        <div id="summary-content"></div>
+    </div>
+    <aside id="artifact-panel" class="artifact-panel" aria-label="Created artifacts" hidden>
+        <div class="artifact-panel__header">
+            <div>
+                <div class="artifact-panel__eyebrow">OpenCode workspace</div>
+                <h2>Artifacts</h2>
+            </div>
+            <div class="artifact-panel__header-actions">
+                <button id="artifact-refresh-btn" class="artifact-panel__icon-button" type="button" aria-label="Refresh artifacts">↻</button>
+                <button id="artifact-close-btn" class="artifact-panel__icon-button" type="button" aria-label="Close artifacts">×</button>
+            </div>
+        </div>
+        <p class="artifact-panel__description">Files created by OpenCode during this browser session.</p>
+        <div id="artifact-status" class="artifact-panel__status" role="status"></div>
+        <div id="artifact-list" class="artifact-panel__list"></div>
+    </aside>
+    <aside id="bookmarks-panel" class="bookmarks-panel" aria-label="Bookmarks" hidden>
+        <div class="bookmarks-panel__header">
+            <div>
+                <div class="bookmarks-panel__eyebrow">Library</div>
+                <h2>Bookmarks</h2>
+            </div>
+            <div class="artifact-panel__header-actions">
+                <button id="bookmarks-refresh-btn" class="artifact-panel__icon-button" type="button" aria-label="Refresh bookmarks">↻</button>
+                <button id="bookmarks-close-btn" class="artifact-panel__icon-button" type="button" aria-label="Close bookmarks">×</button>
+            </div>
+        </div>
+        <p id="bookmarks-status" class="bookmarks-panel__status" role="status"></p>
+        <form id="bookmarks-search-form" class="bookmarks-panel__search" role="search">
+            <input id="bookmarks-search-input" type="search" maxlength="500" placeholder="Ask AI about saved pages" aria-label="Search saved bookmarks with AI">
+            <button id="bookmarks-search-btn" type="submit">Ask AI</button>
+        </form>
+        <div id="bookmarks-list" class="bookmarks-panel__list"></div>
+    </aside>
+    <aside id="settings-panel" class="settings-panel" aria-label="OpenCode settings" hidden>
+        <div class="settings-panel__header">
+            <div>
+                <div class="settings-panel__eyebrow">OpenCode</div>
+                <h2>Settings</h2>
+            </div>
+            <button id="settings-close-btn" class="artifact-panel__icon-button" type="button" aria-label="Close settings">×</button>
+        </div>
+        <form id="settings-form" class="settings-panel__form">
+            <label for="settings-provider">Provider</label>
+            <select id="settings-provider"><option value="opencode-go">OpenCode Go</option><option value="entrim">Entrim</option><option value="openrouter">OpenRouter</option><option value="custom">Other configured provider</option></select>
+            <section id="settings-entrim-section" class="settings-panel__section" aria-labelledby="settings-entrim-title">
+                <div><h3 id="settings-entrim-title">Entrim</h3><p>Uses api.entrim.ai. Leave the key blank to use your existing OpenCode credentials. A key entered here is saved securely on this device.</p></div>
+                <label for="settings-entrim-api-key">Entrim API key</label>
+                <input id="settings-entrim-api-key" type="password" autocomplete="new-password" spellcheck="false" placeholder="Entrim API key">
+                <div id="settings-entrim-key-status" class="settings-panel__key-status" role="status"></div>
+                <label class="settings-panel__checkbox"><input id="settings-clear-entrim-key" type="checkbox">Remove the saved Entrim key</label>
+            </section>
+            <section class="settings-panel__section" aria-labelledby="settings-openrouter-title">
+                <div>
+                    <h3 id="settings-openrouter-title">OpenRouter</h3>
+                    <p>Saved locally with your operating system’s secure credential storage. OpenCode receives it only when a new session starts.</p>
+                </div>
+                <label for="settings-openrouter-api-key">API key</label>
+                <input id="settings-openrouter-api-key" type="password" autocomplete="new-password" spellcheck="false" placeholder="sk-or-v1-…">
+                <div id="settings-openrouter-key-status" class="settings-panel__key-status" role="status"></div>
+                <label class="settings-panel__checkbox" for="settings-clear-openrouter-key">
+                    <input id="settings-clear-openrouter-key" type="checkbox">
+                    Remove the saved key
+                </label>
+            </section>
+            <section class="settings-panel__section" aria-labelledby="settings-subtitles-title">
+                <div>
+                    <h3 id="settings-subtitles-title">Subtitles — OpenSubtitles</h3>
+                    <p>Used to find captions when the video in the tab does not expose any. The key is saved securely on this device and used only for cast subtitle lookups.</p>
+                </div>
+                <label for="settings-subtitles-api-key">OpenSubtitles API key</label>
+                <input id="settings-subtitles-api-key" type="password" autocomplete="new-password" spellcheck="false" placeholder="OpenSubtitles API key">
+                <div id="settings-subtitles-key-status" class="settings-panel__key-status" role="status"></div>
+                <label class="settings-panel__checkbox" for="settings-clear-subtitles-key">
+                    <input id="settings-clear-subtitles-key" type="checkbox">
+                    Remove the saved key
+                </label>
+            </section>
+            <section class="settings-panel__section" aria-labelledby="settings-model-title">
+                <div>
+                    <h3 id="settings-model-title">Model</h3>
+                    <p>Used the next time OpenCode starts. The terminal header shows this selected model but does not edit it.</p>
+                </div>
+                <label for="settings-model-input">OpenCode model</label>
+                <input id="settings-model-input" list="settings-model-options" value="opencode-go/glm-5.3-flash" spellcheck="false" autocomplete="off">
+                <datalist id="settings-model-options">
+                    <option value="opencode-go/glm-5.3-flash"></option>
+                    <option value="entrim/zai-org/GLM-5.3-Flash"></option>
+                    <option value="entrim/Qwen/Qwen3.8-27B"></option>
+                    <option value="entrim/deepseek-ai/DeepSeek-V4-Flash"></option>
+                    <option value="openrouter/z-ai/glm-5.3-flash"></option>
+                    <option value="relace/fp4"></option>
+                    <option value="openai/gpt-5.4-mini"></option>
+                    <option value="anthropic/claude-sonnet-4-5"></option>
+                    <option value="google/gemini-3-pro"></option>
+                    <option value="opencode-go/deepseek-v4-flash"></option>
+                    <option value="opencode-go/kimi-k3"></option>
+                    <option value="opencode-go/qwen3.8-max"></option>
+                    <option value="opencode-go/claude-haiku-5-5"></option>
+                </datalist>
+            </section>
+            <div id="settings-status" class="settings-panel__status" role="status"></div>
+            <div class="settings-panel__actions">
+                <button id="settings-cancel-btn" type="button" class="artifact-card__button">Cancel</button>
+                <button id="settings-save-btn" type="submit" class="artifact-card__button artifact-card__button--download">Save settings</button>
+            </div>
+        </form>
+    </aside>
+    <section id="terminal-panel" aria-label="OpenCode terminal" hidden>
+        <div id="terminal-resizer" role="separator" aria-orientation="horizontal" aria-label="Resize terminal"></div>
+        <div class="terminal-toolbar">
+            <div class="terminal-brand" aria-label="OpenCode terminal">
+                <span class="terminal-brand__icon" aria-hidden="true">⌘</span>
+                <span class="terminal-title">OpenCode</span>
+            </div>
+            <span id="terminal-model-display" class="terminal-model-display" title="Change the model in Settings">opencode-go/glm-5.3-flash</span>
+            <span id="terminal-status" data-state="stopped" role="status">Stopped</span>
+            <div class="terminal-toolbar__actions">
+                <div class="terminal-dock-controls" role="group" aria-label="OpenCode terminal position">
+                    <button id="terminal-dock-bottom-btn" type="button" aria-pressed="true" aria-label="Dock terminal at bottom" title="Dock at bottom">↧</button>
+                    <button id="terminal-dock-left-btn" type="button" aria-pressed="false" aria-label="Dock terminal on left" title="Dock on left">↤</button>
+                </div>
+                <button id="terminal-new-session-btn" class="terminal-toolbar__icon-button terminal-toolbar__icon-button--primary" type="button" aria-label="Start a new OpenCode session" title="New session">↻</button>
+                <button id="terminal-files-btn" class="terminal-toolbar__icon-button" type="button" aria-label="Upload task files for this OpenCode session" title="Session files">⌁</button>
+                <button id="terminal-stop-btn" class="terminal-toolbar__icon-button" type="button" disabled aria-label="Stop OpenCode" title="Stop">■</button>
+                <button id="terminal-close-btn" class="terminal-toolbar__icon-button" type="button" aria-label="Hide terminal" title="Hide terminal">×</button>
+            </div>
+        </div>
+        <div id="opencode-terminal" tabindex="0"></div>
+    </section>
+    <aside id="session-files-panel" class="session-files-panel" aria-label="OpenCode session files" hidden>
+        <div class="session-files-panel__header">
+            <div>
+                <div class="artifact-panel__eyebrow">OpenCode input folder</div>
+                <h2>Session files</h2>
+            </div>
+            <div class="artifact-panel__header-actions">
+                <button id="session-files-refresh-btn" class="artifact-panel__icon-button" type="button" aria-label="Refresh session files" title="Refresh">↻</button>
+                <button id="session-files-close-btn" class="artifact-panel__icon-button" type="button" aria-label="Close session files" title="Close">×</button>
+            </div>
+        </div>
+        <p class="session-files-panel__description">Files here are readable by the current OpenCode session only. They are not automatically shared.</p>
+        <button id="session-files-upload-btn" class="session-files-panel__upload" type="button">Upload files</button>
+        <div id="session-files-status" class="artifact-panel__status" role="status"></div>
+        <div id="session-files-list" class="session-files-panel__list"></div>
+    </aside>
+
+    <aside id="cast-panel" class="cast-panel" aria-label="Cast to TV" hidden>
+        <div class="cast-panel__header">
+            <div>
+                <div class="artifact-panel__eyebrow">DLNA / UPnP</div>
+                <h2>Cast to TV</h2>
+            </div>
+            <div class="artifact-panel__header-actions">
+                <button id="cast-refresh-btn" class="artifact-panel__icon-button" type="button" aria-label="Search for cast devices" title="Search for devices">↻</button>
+                <button id="cast-close-btn" class="artifact-panel__icon-button" type="button" aria-label="Close cast panel" title="Close">×</button>
+            </div>
+        </div>
+        <p class="cast-panel__description">Cast the video playing in the current tab to a TV on this network (Samsung, Fire TV, most smart TVs). The browser can relay compatible, unencrypted HLS video itself; DRM-protected video cannot be cast.</p>
+        <button id="cast-video-btn" class="cast-panel__cast" type="button">Cast video in current tab</button>
+        <p class="cast-panel__hint">Start playback first, then cast. The TV receives only a temporary local relay URL from this browser. Playback is controlled from this panel.</p>
+        <div id="cast-session" class="cast-session" hidden>
+            <input id="cast-seek-range" class="cast-session__range" type="range" min="0" max="0" step="1" value="0" aria-label="Playback position">
+            <div class="cast-session__times"><span id="cast-time-current">0:00</span><span id="cast-time-total">0:00</span></div>
+            <div class="cast-session__controls">
+                <button id="cast-rewind-btn" class="cast-session__btn" type="button" aria-label="Back 10 seconds">−10s</button>
+                <button id="cast-play-btn" class="cast-session__btn cast-session__btn--main" type="button">Pause</button>
+                <button id="cast-forward-btn" class="cast-session__btn" type="button" aria-label="Forward 10 seconds">+10s</button>
+            </div>
+        </div>
+        <button id="cast-stop-btn" class="cast-panel__stop" type="button">Stop casting</button>
+        <div id="cast-status" class="artifact-panel__status" role="status"></div>
+        <div id="cast-device-list" class="cast-panel__list"></div>
+        <div class="cast-subtitles">
+            <label class="cast-subtitles__label" for="cast-subtitle-query">Subtitles — OpenSubtitles</label>
+            <p class="cast-subtitles__hint">Finds captions when the player has none. The selected subtitle is cast with the video.</p>
+            <div class="cast-subtitles__row">
+                <input id="cast-subtitle-query" type="text" placeholder="Show, movie, season…" spellcheck="false">
+                <button id="cast-subtitle-search-btn" class="cast-subtitles__btn" type="button">Find</button>
+            </div>
+            <div id="cast-subtitle-list" class="cast-subtitles__list"></div>
+        </div>
+    </aside>
+
+    <dialog class="workspace-dialog" id="workspace-dialog" aria-labelledby="workspace-title">
+        <header><div><small>YOUR WORKSPACE</small><h2 id="workspace-title">Sessions</h2></div><button id="workspace-close" class="toolbar-btn" aria-label="Close">×</button></header>
+        <p>Save a set of tabs and pick up where you left off.</p>
+        <form id="session-save-form">
+            <label class="session-save-target-label" for="session-save-target">Save to</label>
+            <select id="session-save-target" aria-label="Save to session"><option value="">New session…</option></select>
+            <input id="session-name" required maxlength="80" placeholder="Name this session…" aria-label="Session name">
+            <button id="session-save-btn" class="toolbar-btn toolbar-btn--primary">Create session</button>
+        </form>
+        <p id="session-save-hint">Create a session from the current tabs and groups.</p>
+        <p id="workspace-status" role="status"></p><div id="saved-session-list"></div>
+    </dialog>
+    <dialog class="workspace-dialog" id="groups-dialog" aria-labelledby="groups-title">
+        <header><div><small>ORGANIZE YOUR TABS</small><h2 id="groups-title">Tab groups</h2></div><button id="groups-close" class="toolbar-btn" aria-label="Close groups">×</button></header>
+        <p>Drag a tab onto a group in the sidebar, or choose a group by name below.</p>
+        <p id="group-selected-tab"></p>
+        <div id="workspace-groups"></div>
+        <form id="tab-group-form"><input id="tab-group-name" required maxlength="60" placeholder="New group name" aria-label="New group name"><button class="toolbar-btn toolbar-btn--primary">Create group</button></form>
+        <button id="tab-ungroup" class="toolbar-btn" type="button">Remove selected tab from group</button>
+        <p id="groups-status" role="status"></p>
+    </dialog>
+    <!-- Include the scripts in the correct order -->
+    <script type="module" src="./history-manager.js"></script>
+    <script type="module" src="./tab-manager.js"></script>
+    <script type="module" src="./summarizer.js"></script>
+    <script src="./node_modules/@xterm/xterm/lib/xterm.js"></script>
+    <script src="./node_modules/@xterm/addon-fit/lib/addon-fit.js"></script>
+    <script type="module" src="./renderer.js"></script>
+</body>
+</html>

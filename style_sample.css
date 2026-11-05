@@ -1,0 +1,95 @@
+/* General Reset & Body Styling */
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol";
+  line-height: 1.7;
+  color: #333;
+  background-color: #fdfdfd;
+  margin: 0 auto; /* Center the body content */
+  padding: 20px;
+  max-width: 5000px; /* Limit width for readability */
+  box-sizing: border-box; /* Include padding in width calculation */
+}
+
+/* Headings */
+h1, h2, h3, h4, h5, h6 {
+  color: #111;
+  margin-top: 1.8em;
+  margin-bottom: 0.8em;
+  line-height: 1.3;
+}
+
+h1 { font-size: 2.2em; }
+h2 { font-size: 1.8em; }
+h3 { font-size: 1.5em; }
+
+/* Paragraphs */
+p {
+  margin-bottom: 1.2em;
+}
+
+/* Images */
+img {
+  max-width: 100%; /* Responsive images */
+  height: auto;    /* Maintain aspect ratio */
+  display: block;  /* Allow margin auto to work for centering */
+  margin: 2em auto; /* Center images vertically and horizontally */
+  border-radius: 4px; /* Slightly rounded corners */
+  box-shadow: 0 2px 5px rgba(0,0,0,0.1); /* Subtle shadow */
+}
+
+/* Captions (targeting common elements) */
+figcaption {
+  text-align: center;
+  font-size: 0.9em;
+  color: #555;
+  margin-top: -1.5em; /* Pull caption closer to image */
+  margin-bottom: 2em;
+}
+
+/* Links */
+a {
+  color: #007bff;
+  text-decoration: none;
+}
+a:hover {
+  text-decoration: underline;
+}
+
+/* Code Blocks & Inline Code */
+pre, code {
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, Courier, monospace;
+  background-color: #f0f0f0;
+  border-radius: 3px;
+}
+code {
+  padding: 0.2em 0.4em;
+}
+pre {
+  padding: 1em;
+  overflow-x: auto;
+  margin-bottom: 1.5em;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+}
+
+/* Blockquotes */
+blockquote {
+  border-left: 4px solid #ccc;
+  padding-left: 1.5em;
+  margin-left: 0;
+  margin-right: 0;
+  margin-bottom: 1.5em;
+  font-style: italic;
+  color: #555;
+}
+blockquote p {
+  margin-bottom: 0.5em; /* Reduce margin for paragraphs inside blockquotes */
+}
+
+/* Lists */
+ul, ol {
+  margin-bottom: 1.5em;
+  padding-left: 2em;
+}
+li {
+  margin-bottom: 0.6em;
+}

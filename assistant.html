@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self' data:; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: *;">
+    <meta http-equiv="X-Content-Security-Policy" content="default-src 'self' data:; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: *;">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Workspace</title>
+    <link rel="stylesheet" href="assistant.css">
+</head>
+<body>
+    <div id="assistant-app" class="assistant-shell">
+        <header class="assistant-header">
+            <div class="assistant-header-copy">
+                <p class="eyebrow">Browser-integrated assistant</p>
+                <h1 id="assistant-session-title">New chat</h1>
+            </div>
+            <div class="assistant-header-meta">
+                <span id="assistant-status" class="status-pill" data-state="idle">Idle</span>
+                <button id="assistant-new-chat" class="ghost-button" type="button">New chat</button>
+            </div>
+        </header>
+
+        <section class="assistant-quick-actions" aria-label="Quick actions">
+            <div id="assistant-session-list" class="session-list"></div>
+            <div class="assistant-monitoring">
+                <div class="monitor-panel">
+                    <div class="panel-label">Tabs touched</div>
+                    <div id="assistant-tab-list" class="assistant-tab-list" aria-live="polite"></div>
+                </div>
+            </div>
+            <div class="quick-actions">
+                <button class="quick-action" type="button" data-prompt="List the open tabs and summarize what is in the active tab.">Inspect tabs</button>
+                <button class="quick-action" type="button" data-prompt="Summarize the active page and highlight the most important links or prices.">Summarize page</button>
+                <button class="quick-action" type="button" data-prompt="Open a new tab and search the web for the best current option for my request.">Search the web</button>
+            </div>
+        </section>
+
+        <main class="assistant-main">
+            <section class="assistant-thread-panel" aria-label="Conversation">
+                <div id="assistant-messages" class="assistant-messages"></div>
+            </section>
+
+            <aside class="assistant-log-panel" aria-label="Action log">
+                <div class="panel-label">Action log</div>
+                <div id="assistant-log-list" class="assistant-log-list"></div>
+            </aside>
+        </main>
+
+        <footer class="assistant-composer-bar">
+            <form id="assistant-composer-form" class="assistant-composer">
+                <label class="sr-only" for="assistant-input">Message the assistant</label>
+                <textarea id="assistant-input" rows="3" placeholder="Describe what you want the browser to do..."></textarea>
+                <div class="composer-actions">
+                    <button id="assistant-stop" class="ghost-button danger" type="button">Stop</button>
+                    <button id="assistant-send" class="primary-button" type="submit">Send</button>
+                </div>
+            </form>
+        </footer>
+    </div>
+
+    <script type="module" src="./assistant-renderer.js"></script>
+</body>
+</html>

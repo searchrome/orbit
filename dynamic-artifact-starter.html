@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><style>
+body{font:15px system-ui;margin:24px;color:#183047}article{padding:16px;border:1px solid #dae2eb;border-radius:12px;margin:12px 0}pre{white-space:pre-wrap;overflow-wrap:anywhere}input{padding:8px;width:90%}
+</style></head>
+<body><h1>My source dashboard</h1><label>Personal note <input id="note" placeholder="Saved only for this app"></label><p id="error" role="status"></p><main id="sources"></main>
+<script>
+const container = document.getElementById('sources');
+function render(state) {
+    document.getElementById('error').textContent = state.error || '';
+    container.replaceChildren();
+    for (const [id, source] of Object.entries(state.sources || {})) {
+        const card = document.createElement('article');
+        const heading = document.createElement('h2'); heading.textContent = id;
+        const time = document.createElement('small'); time.textContent = source.url + ' · ' + new Date(source.fetchedAt).toLocaleString();
+        const text = document.createElement('pre'); text.textContent = JSON.stringify(source.result, null, 2);
+        card.append(heading, time, text); container.append(card);
+    }
+    if (!container.childElementCount) container.textContent = 'No source data yet. Open the declared sources and use Refresh now.';
+}
+artifact.subscribe(render);
+artifact.data().then(render).catch(error => document.getElementById('error').textContent = error.message);
+artifact.storage.get('note').then(value => document.getElementById('note').value = value || '');
+document.getElementById('note').addEventListener('change', async event => {
+    try { await artifact.storage.set('note', event.target.value); }
+    catch (error) { document.getElementById('error').textContent = error.message; }
+});
+</script></body></html>

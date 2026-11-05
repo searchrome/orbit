@@ -1,0 +1,53 @@
+# Dependencies
+node_modules/
+.pnpm-store/
+.npm/
+.yarn/
+
+# Build and packaging output
+dist/
+build/
+out/
+release/
+*.asar
+
+# Test and coverage artifacts
+coverage/
+.nyc_output/
+.jest-cache/
+
+# Environment and local config
+.env
+.env.*
+!.env.example
+
+# Logs
+*.log
+logs/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# OS/editor artifacts
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Local temporary files
+.tmp/
+tmp/
+*.tmp
+temp/
+*.pid
+
+# Runtime cache
+.cache/
+*.tsbuildinfo
+
+# Local browser automation artifacts
+.playwright-cli/
+output/

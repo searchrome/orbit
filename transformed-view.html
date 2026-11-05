@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self'; script-src 'self'; img-src data:; connect-src 'none'; base-uri 'none'; form-action 'none'">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Transformed view</title>
+  <link rel="stylesheet" href="transformed-view.css">
+</head>
+<body>
+  <header class="view-header">
+    <div class="view-title-group">
+      <span class="eyebrow">OpenCode transformed view</span>
+      <strong id="view-title">Loading view…</strong>
+      <span id="view-source" class="source" title="Source page"></span>
+    </div>
+    <div class="actions">
+      <button id="refresh-view" type="button">Refresh</button>
+      <button id="open-original" type="button">Open original</button>
+    </div>
+  </header>
+  <main>
+    <p id="view-status" class="status" role="status">Loading current source content…</p>
+    <article id="view-content" class="content" aria-live="polite"></article>
+  </main>
+  <script src="transformed-view.js"></script>
+</body>
+</html>
