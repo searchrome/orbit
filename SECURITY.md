@@ -22,3 +22,12 @@ placeholder values in examples. If a credential is accidentally published,
 revoke or rotate it immediately; removing it from a commit does not invalidate
 it. Keep browser debugging and automation endpoints restricted to trusted
 local access.
+
+## Dependency maintenance
+
+Run `npm audit` after changing dependencies. The lockfile includes patched
+versions of the runtime and test tools. Two targeted overrides keep Jest's
+`brace-expansion` 1.x dependency on a patched release and Mocha's
+`serialize-javascript` on a patched release. Recheck these overrides when
+upgrading their parent tools. Do not use a forced audit fix that downgrades
+Electron tooling or restores the discontinued Spectron test runner.

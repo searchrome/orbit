@@ -16,7 +16,7 @@ __tests__/
 ├── integration/        # Integration tests
 │   └── network-control.test.js
 ├── e2e/                # End-to-end tests
-│   └── browser-navigation.test.js
+│   └── browser-navigation.test.cjs
 └── README.md           # This file
 ```
 
@@ -27,9 +27,22 @@ The following npm scripts are available for running tests:
 - `npm test` - Run all tests
 - `npm run test:unit` - Run only unit tests
 - `npm run test:integration` - Run only integration tests
-- `npm run test:e2e` - Run only end-to-end tests
+- `npm run test:e2e` - Run desktop end-to-end tests with Playwright and the Node.js test runner
 - `npm run test:all` - Run all tests in sequence
 - `npm run test:mocha` - Run tests using electron-mocha (alternative test runner)
+
+## Desktop end-to-end setup
+
+Use Node.js 22.12 or later, run `npm install`, and run `npm run test:e2e` from
+an interactive desktop session. Linux CI needs a display server (for example,
+`xvfb-run -a npm run test:e2e`). Playwright launches the installed Electron
+runtime; a separate Chromium download is not required.
+
+The tests use a temporary browser profile and local HTTP pages. They cover
+navigation, tabs, browser controls, search over unloaded tabs, and automatic
+session persistence across a clean restart. They do not modify your normal
+browser profile or call external AI services. Spectron has been replaced by
+Playwright because Spectron is discontinued and depended on vulnerable tools.
 
 ## Test Coverage
 

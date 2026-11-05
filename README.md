@@ -29,7 +29,7 @@ A customizable Electron-based browser with unique features for content control, 
 ## Installation
 
 ### Prerequisites
-- Node.js 22 or later
+- Node.js 22.12 or later
 - npm (included with Node.js)
 
 ### Setup

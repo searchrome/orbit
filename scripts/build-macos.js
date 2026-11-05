@@ -2,7 +2,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const { execFileSync } = require('node:child_process');
-const packager = require('@electron/packager');
+const { packager } = require('@electron/packager');
 
 async function build() {
   if (process.platform !== 'darwin') throw new Error('Build the macOS app on a Mac.');

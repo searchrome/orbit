@@ -122,6 +122,17 @@ describe('workspace screens and sidebar sizing', () => {
     expect(panel.currentSession.id).toBe('other');
   });
 
+  test('background saves preserve a session name being edited and a newly renamed identity', async () => {
+    const input = document.getElementById('session-name');
+    input.value = 'My new name';
+    window.electronAPI.invoke.mockResolvedValue({id: 'current', name: 'Session auto', session: tabs.getSessionSnapshot()});
+    await panel.autosave();
+    expect(input.value).toBe('My new name');
+    panel.setCurrentSession({id: 'current', name: 'Renamed', session: tabs.getSessionSnapshot()});
+    await panel.autosave();
+    expect(panel.currentSession.name).toBe('Renamed');
+  });
+
   test('restores controls and keeps the current workspace after switching fails', async () => {
     window.electronAPI.invoke.mockRejectedValueOnce(new Error('Disk full'));
     await expect(panel.switchSession('other')).rejects.toThrow('Disk full');

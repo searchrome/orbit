@@ -35,6 +35,7 @@ export default class WorkspacePanel {
         if (!this.ready || this.transitioning) return;
         const record = await window.electronAPI.invoke('workspace-rename', {name: document.getElementById('session-name').value});
         this.setCurrentSession(record);
+        document.getElementById('session-name').value = record.name;
         await this.render();
         this.status('Session renamed. Changes are saved automatically.');
       });
@@ -213,7 +214,9 @@ export default class WorkspacePanel {
       const record = await window.electronAPI.invoke('workspace-autosave', this.getCurrentSnapshot());
       if (this.transitioning || this.currentSession.id !== id) return;
       if (!record) throw new Error('The active session changed. Reopen the browser to retry.');
-      this.setCurrentSession(record);
+      this.currentSession = {...this.currentSession, session: record.session, updatedAt: record.updatedAt};
+      this.saveState = 'All changes saved automatically';
+      this.updateSessionStatus();
       if (this.dialog.open) await this.render();
     } catch (error) {
       if (!this.transitioning && this.currentSession.id === id) {

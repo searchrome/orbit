@@ -6,7 +6,7 @@ open an issue first to discuss the intended behavior.
 
 ## Development
 
-Use Node.js 22 or later and npm:
+Use Node.js 22.12 or later and npm:
 
 ```sh
 git clone https://github.com/searchrome/orbit.git
