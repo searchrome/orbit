@@ -1,3 +1,5 @@
+import { normalizeBrowserToolUrl } from './browser-url-policy.js';
+
 const MAX_BROWSER_ERROR_MESSAGE_CHARS = 500;
 const SAFE_READ_BROWSER_TOOLS = new Set([
     'get_tab_info',
@@ -349,6 +351,9 @@ class BrowserTools {
     }
 
     openTab({ url = 'about:blank', activate = false, title = 'New Tab', assistantOwned = true, role = 'browser', hidden = false, partition = null, trackHistory = true } = {}) {
+        const safeUrl = normalizeBrowserToolUrl(url);
+        if (!safeUrl) return {ok: false, error: 'Browser tools allow only HTTP, HTTPS, or about:blank URLs.'};
+        url = safeUrl;
         if (this._isAssistantWorkspaceUrl(url)) {
             return { ok: false, error: 'Assistant workspace tabs can only be opened by the host UI.' };
         }
@@ -396,9 +401,9 @@ class BrowserTools {
         if (rejection) {
             return rejection;
         }
-        if (!url || typeof url !== 'string') {
-            return { ok: false, error: 'navigateTab requires a URL' };
-        }
+        const safeUrl = normalizeBrowserToolUrl(url);
+        if (!safeUrl) return {ok: false, error: 'Browser tools allow only HTTP, HTTPS, or about:blank URLs.'};
+        url = safeUrl;
         if (this._isAssistantWorkspaceUrl(url)) {
             return { ok: false, error: 'Assistant workspace tabs cannot be loaded through browsing tools.' };
         }

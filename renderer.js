@@ -378,69 +378,6 @@ window.electronAPI.on('guest-open-link', (payload) => {
   });
 });
 
-// Function to inject interaction listeners into a webview
-const injectInteractionListeners = (webviewElement) => {
-  if (!webviewElement) {
-    console.error('Cannot inject interaction listeners: webview element is null');
-    return;
-  }
-
-  // Using string concatenation to avoid template literal issues
-  const script = '(' + function() {
-    // Check if electronAPI is available in the guest page (via preload)
-    if (!window.electronAPI || typeof window.electronAPI.sendToHost !== 'function') {
-      console.error('electronAPI.sendToHost not available in webview guest page. Interaction listeners cannot be added.');
-      return;
-    }
-
-    // Add a check to ensure we don't add listeners multiple times unnecessarily
-    if (window.hasInjectedInteractionListeners) {
-      console.log('Interaction listeners already injected.');
-      return;
-    }
-    window.hasInjectedInteractionListeners = true; // Flag to prevent re-injection
-
-    let lastScrollY = window.scrollY;
-    let scrollDebounceTimer;
-
-    // Debounced scroll handler
-    const handleScroll = () => {
-      clearTimeout(scrollDebounceTimer);
-      scrollDebounceTimer = setTimeout(() => {
-        const currentScrollY = window.scrollY;
-        // Check if scrolled down significantly (e.g., more than 10px)
-        if (currentScrollY > lastScrollY + 10) {
-          console.log('Webview scrolled down');
-          // Send message to host (renderer process)
-          window.electronAPI.sendToHost('webview-scrolled-down');
-        }
-        lastScrollY = currentScrollY; // Update last scroll position
-      }, 100); // Debounce time in ms
-    };
-
-    // Click handler
-    const handleClick = () => {
-      console.log('Webview clicked');
-      // Send message to host (renderer process)
-      window.electronAPI.sendToHost('webview-clicked');
-    };
-
-    // Remove existing listeners first (safer in case of re-injection attempts)
-    window.removeEventListener('scroll', handleScroll);
-    document.removeEventListener('click', handleClick, { capture: true }); // Match capture setting
-
-    // Add new listeners
-    window.addEventListener('scroll', handleScroll, { passive: true });
-    document.addEventListener('click', handleClick, { capture: true }); // Use capture to catch clicks early
-
-    console.log('Injected scroll and click listeners into webview.');
-  } + ')();'; // Immediately invoke the function
-
-  webviewElement.executeJavaScript(script)
-    .then(() => console.log('Successfully injected interaction listener script.'))
-    .catch(err => console.error('Failed to inject interaction listener script:', err));
-};
-
 // Function to update button appearance
 const setToolbarToggleState = (button, stateText) => {
   const stateNode = button?.querySelector?.('.toolbar-btn__state');

@@ -60,6 +60,9 @@ OpenCode requires its own installation and authentication, described below.
 See [CONTRIBUTING.md](CONTRIBUTING.md) for development and pull request guidance,
 and [SECURITY.md](SECURITY.md) for reporting vulnerabilities.
 
+For feature implementation entry points and security regression coverage, see
+[Source review evidence](docs/source-review-evidence.md).
+
 ## Usage
 
 ### Search tabs
@@ -122,6 +125,13 @@ The terminal automatically gives OpenCode a local `browser` MCP server. Its tool
 Use **New session** after changing models. **Stop** cancels queued browser work, terminates OpenCode and its owned MCP descendants, and reports a possible completed action rather than incorrectly reporting success when an in-flight click/type could not be undone. Hiding the drawer leaves the session running so it can be reopened without losing the conversation. While OpenCode is starting or running, the older Assistant workspace cannot control browser tabs.
 
 Set `OPENCODE_TERMINAL_ENABLED=false` to hide the terminal and reject terminal startup during a staged rollout.
+
+OpenCode tracks temporary research tabs per task. Its browser agent starts with
+`begin_task` and calls `complete_task` after verifying the result, before its
+final answer. Cleanup closes only tabs opened through that task's `open_tab`
+tool. Existing tabs, artifact previews, explicitly retained results, and source
+tabs needed by live artifacts stay open. Cleanup reports retained tabs and
+failures; hiding or stopping the terminal does not trigger tab deletion.
 
 ### Special URL Bar Features
 - Type a search term to search with DuckDuckGo

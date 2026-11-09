@@ -294,9 +294,10 @@ class ArtifactService {
             res.writeHead(200, {
                 'content-type': 'text/html; charset=utf-8',
                 'content-security-policy': interactiveHtml
-                    ? "sandbox allow-scripts; default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; img-src data:; connect-src 'none'; form-action 'none'; base-uri 'none'"
+                    ? "sandbox allow-scripts; default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; img-src data:; connect-src 'none'; form-action 'none'; base-uri 'none'; frame-src 'none'; frame-ancestors 'none'; object-src 'none'; worker-src 'none'"
                     : "sandbox allow-downloads; default-src 'none'; style-src 'unsafe-inline'; img-src 'none'; connect-src 'none'; form-action 'none'; base-uri 'none'; frame-src 'none'",
                 'x-content-type-options': 'nosniff',
+                'referrer-policy': 'no-referrer',
                 'cache-control': 'no-store'
             });
             res.end(interactiveHtml ? content : staticPreview(artifact, content, this.url(artifact, 'download')));

@@ -85,4 +85,22 @@ describe('TransformedViewManager', () => {
         expect(script).toContain('const source = document.querySelector(config.rootSelector);');
         expect(script).not.toContain('|| document.body');
     });
+
+    test('resumes the hidden source after load listeners are installed and closes it after extraction', async () => {
+        const sourceTab = {id: 'source', webview: {}, deferredUrl: 'https://example.com'};
+        const order = [];
+        const manager = createManager({
+            createTab: jest.fn(() => sourceTab.id), getTabById: jest.fn(() => sourceTab),
+            _resumeTab: jest.fn(() => order.push('resume'))
+        });
+        manager.waitForLoad = jest.fn(() => {order.push('listen'); return Promise.resolve();});
+        manager.waitForReady = jest.fn().mockResolvedValue(undefined);
+        manager.extractSource = jest.fn().mockResolvedValue({content: 'Article', url: 'https://example.com'});
+        manager.send = jest.fn();
+        window.electronAPI.invoke.mockResolvedValue({});
+        await manager.refreshView({id: 'view-tab'}, {id: 'view', name: 'Reader', sourceUrl: 'https://example.com', recipe: {rootSelector: 'article'} });
+        expect(order).toEqual(['listen', 'resume']);
+        expect(manager.tabManager.closeTab).toHaveBeenCalledWith(sourceTab.id);
+        expect(manager.send).toHaveBeenCalledWith({id: 'view-tab'}, expect.objectContaining({state: 'ready', content: 'Article'}));
+    });
 });

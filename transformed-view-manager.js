@@ -124,8 +124,9 @@ export default class TransformedViewManager {
             // must not complete before the manager is ready to observe it.
             const loaded = this.waitForLoad(sourceTab.webview, controller.signal);
             sourceTab.loadUrl = view.sourceUrl;
-            sourceTab.deferredUrl = null;
-            sourceTab.webview.setAttribute('src', view.sourceUrl);
+            // Deferred tabs have no attached renderer. Resume the hidden
+            // source after listeners are installed, without selecting it.
+            this.tabManager._resumeTab(sourceTab);
             await loaded;
             await this.waitForReady(sourceTab.webview, view.recipe.readySelector, controller.signal);
             const extracted = await this.extractSource(sourceTab.webview, view.recipe, controller.signal);

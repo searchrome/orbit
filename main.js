@@ -1,5 +1,6 @@
 const { app, BrowserWindow, ipcMain, session, webContents, safeStorage, dialog, powerSaveBlocker } = require('electron');
 const path = require('path');
+const { pathToFileURL } = require('node:url');
 const fs = require('fs').promises;
 const fsSync = require('fs');
 const crypto = require('crypto');
@@ -292,7 +293,7 @@ function sendOpenCodeOutput(data) {
 
 function isMutatingBrowserTool(tool) {
   return new Set([
-    'open_tab', 'focus_tab', 'close_tab', 'navigate_tab',
+    'open_tab', 'focus_tab', 'close_tab', 'cleanup_task_tabs', 'navigate_tab',
     'click_element', 'press_and_hold', 'type_into', 'scroll_page', 'search_site',
     'create_transformed_view', 'update_transformed_view',
     'open_transformed_view', 'refresh_transformed_view'
@@ -333,6 +334,15 @@ function cancelAllBrowserToolRequests(code = 'browser_cancelled', message = 'Bro
 }
 
 function requestBrowserToolFromRenderer({ tool, args, timeoutMs = 30000, signal } = {}) {
+  if (tool === 'cleanup_task_tabs') {
+    try {
+      const dynamic = artifactService?.dynamic;
+      const protectedUrls = dynamic ? dynamic.list().flatMap(item => dynamic.get(item.id).definition.sources.map(source => source.url)) : [];
+      args = {...args, protectedUrls: [...new Set(protectedUrls)]};
+    } catch (error) {
+      return Promise.resolve({ok: false, error: {code: 'artifact_source_check_failed', message: 'Could not check live artifact sources; no tabs were closed.', retryable: true}});
+    }
+  }
   if (!mainWindow || mainWindow.isDestroyed()) {
     return Promise.resolve({
       ok: false,
@@ -617,7 +627,7 @@ function createWindow(namedSession = null) {
       // and use the preload script to expose specific functionality.
       nodeIntegration: false,
       contextIsolation: true,
-      additionalArguments: ['--browser-host-renderer'],
+      additionalArguments: ['--browser-host-renderer', `--browser-host-url=${pathToFileURL(path.join(__dirname, 'index.html')).href}`],
     },
   });
 
@@ -625,6 +635,21 @@ function createWindow(namedSession = null) {
   if (!mainWindow) mainWindow = shellWindow;
   const shellContentsId = shellWindow.webContents.id;
   if (namedSession) windowStartupSessions.set(shellContentsId, namedSession);
+
+  const trustedShellUrl = pathToFileURL(path.join(__dirname, 'index.html')).href;
+  shellWindow.webContents.on('will-navigate', (event, url) => {
+    if (url !== trustedShellUrl) event.preventDefault();
+  });
+  shellWindow.webContents.on('will-attach-webview', (_event, preferences) => {
+    preferences.nodeIntegration = false;
+    preferences.contextIsolation = true;
+    preferences.sandbox = true;
+    const allowed = ['guest-preload.js', 'transformed-preload.js', 'tab-crashed-preload.js'].map(file => path.join(__dirname, file));
+    if (preferences.preload && !allowed.includes(preferences.preload)) delete preferences.preload;
+    preferences.additionalArguments = (preferences.additionalArguments || []).filter(arg => !arg.startsWith('--browser-host-') && !arg.startsWith('--browser-guest-'));
+    const localPage = {'transformed-preload.js': 'transformed-view.html', 'tab-crashed-preload.js': 'tab-crashed.html'}[path.basename(preferences.preload || '')];
+    if (localPage) preferences.additionalArguments.push(`--browser-guest-page-url=${pathToFileURL(path.join(__dirname, localPage)).href}`);
+  });
 
   // Load index.html into the main window.
   shellWindow.loadFile(path.join(__dirname, 'index.html'));

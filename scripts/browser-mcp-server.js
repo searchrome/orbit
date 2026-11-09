@@ -3,6 +3,7 @@
 const { McpServer } = require('@modelcontextprotocol/sdk/server/mcp.js');
 const { StdioServerTransport } = require('@modelcontextprotocol/sdk/server/stdio.js');
 const z = require('zod');
+const BrowserTaskLifecycle = require('../browser-task-lifecycle');
 
 const endpoint = String(process.env.BROWSER_REMOTE_URL || '');
 const token = String(process.env.BROWSER_REMOTE_TOKEN || '');
@@ -71,7 +72,7 @@ async function callArtifact(tool, args) {
 
 function browserTool(name, description, inputSchema) {
     server.registerTool(name, { description, inputSchema }, async (args) => {
-        const result = await callBrowser(name, args);
+        const result = name === 'open_tab' ? await taskLifecycle.open(args) : await callBrowser(name, args);
         return textResult(result, result?.ok === false);
     });
 }
@@ -100,6 +101,22 @@ const batchReadRequest = z.object({
     args: z.object({ tabId }).passthrough()
 });
 const server = new McpServer({ name: 'simple-electron-browser', version: '1.0.0' });
+const taskLifecycle = new BrowserTaskLifecycle(callBrowser);
+
+server.registerTool('begin_task', {
+    description: 'Begin a new user task before opening research tabs. Task tabs are tracked automatically; existing user tabs are never adopted.',
+    inputSchema: {}
+}, async () => {
+    const result = await taskLifecycle.begin();
+    return textResult(result, result.ok === false);
+});
+server.registerTool('complete_task', {
+    description: 'Call after verifying the final result and before your final answer. Closes only research tabs opened by this task. Preserves existing user tabs, artifact/result tabs, live-artifact source tabs, and explicit keepTabIds. Report any cleanup failure instead of claiming all tabs were closed.',
+    inputSchema: {keepTabIds: z.array(tabId).max(500).optional()}
+}, async args => {
+    const result = await taskLifecycle.complete(args);
+    return textResult(result, result?.ok === false);
+});
 
 browserTool('list_tabs', 'List the browser’s visible tabs. Use this before acting so tab IDs come from the current browser state.', {});
 browserTool('get_active_tab', 'Get the tab selected in the browser UI.', {});

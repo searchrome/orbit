@@ -29,11 +29,16 @@ function createWindowCustomEvent(name, detail) {
     return null;
 }
 
-function guestPreloadUrl() {
-    // Electron resolves a webview preload independently from the page URL.
-    // Supplying an absolute file URL keeps the guest bridge available on every
-    // remote site, rather than looking for /preload.js on that site.
-    return new URL('./preload.js', window.location.href).href;
+function guestPreloadUrl(pageUrl) {
+    let filename = 'guest-preload.js';
+    try {
+        const target = new URL(pageUrl, window.location.href);
+        for (const [page, preload] of [['transformed-view.html', 'transformed-preload.js'], ['tab-crashed.html', 'tab-crashed-preload.js']]) {
+            const trusted = new URL(`./${page}`, window.location.href);
+            if (target.protocol === 'file:' && target.pathname === trusted.pathname) filename = preload;
+        }
+    } catch { /* An invalid page never gains a trusted bridge. */ }
+    return new URL(`./${filename}`, window.location.href).href;
 }
 
 class TabManager {
@@ -352,7 +357,7 @@ class TabManager {
         webview.setAttribute('style', 'width:100%; height:100%; display:none;');
         webview.setAttribute('nodeintegration', 'false');
         webview.setAttribute('allowpopups', '');
-        if (!this._isArtifactUrl(loadUrl)) webview.setAttribute('preload', guestPreloadUrl());
+        if (!this._isArtifactUrl(loadUrl)) webview.setAttribute('preload', guestPreloadUrl(loadUrl));
         return webview;
     }
 
@@ -384,7 +389,7 @@ class TabManager {
             tab.loadState = tab.crashed ? 'crashed' : (target === 'about:blank' ? 'idle' : 'loading');
         }
         if (!tab.webview.isConnected) this.contentContainer.appendChild(tab.webview);
-        document.getElementById('collapsed-groups-placeholder')?.remove();
+        if (!tab.hidden) document.getElementById('collapsed-groups-placeholder')?.remove();
         return tab.webview;
     }
 
@@ -827,7 +832,7 @@ class TabManager {
             this.tabContainer.insertBefore(tabElement, document.getElementById('new-tab-btn'));
         }
         
-        const webview = this._createTabWebview(tabId, partition, loadUrl);
+        const webview = this._createTabWebview(tabId, partition, initialLoadUrl);
         if (!shouldDeferLoad) webview.setAttribute('src', initialLoadUrl);
 
         // Create tab object
@@ -1132,10 +1137,7 @@ class TabManager {
                  errorOverlay.classList.remove('visible');
                  errorOverlay.textContent = '';
             }
-            // Inject interaction listeners script
-            if (!tab.internal && typeof injectInteractionListeners === 'function') {
-                injectInteractionListeners(webview);
-            }
+            // Guest interaction notifications are installed by guest-preload.js.
         });
 
         if (tab.internal) {
@@ -1228,18 +1230,21 @@ class TabManager {
                 url = data;
             }
             
-            console.log(`Opening URL in new tab: ${url}`);
-            this.createTab(url);
+            try {
+                const target = new URL(url);
+                if (!['http:', 'https:'].includes(target.protocol)) return;
+                this.createTab(target.href);
+            } catch { /* Reject malformed or unsafe guest link messages. */ }
             return;
         }
 
         if (event.channel === 'recover-crashed-tab') {
-            this.recoverTab(tab.id);
+            if (tab.crashed && tab.crashPage) this.recoverTab(tab.id);
             return;
         }
 
         if (event.channel === 'close-crashed-tab') {
-            this.closeTab(tab.id);
+            if (tab.crashed && tab.crashPage) this.closeTab(tab.id);
             return;
         }
 

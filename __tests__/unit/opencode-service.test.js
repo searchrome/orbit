@@ -68,6 +68,7 @@ describe('OpenCodeService browser agent configuration', () => {
     expect(config.agent.browser.prompt).toContain('web atifactory');
     expect(config.agent.browser.prompt).toContain('contentType "text/html"');
     expect(config.agent.browser.prompt).toContain('BROWSER AGENT OPERATING GUIDE');
+    expect(config.agent.browser.prompt).toContain('complete_task BEFORE your final answer');
     expect(config.agent.browser.prompt).toContain('REQUIRED BUILD WORKFLOW');
     expect(config.agent.browser.prompt).toContain('INTERACTION AND NAVIGATION BOUNDARY');
     expect(config.agent.browser.prompt).toContain('Open source buttons');
@@ -89,6 +90,8 @@ describe('OpenCodeService browser agent configuration', () => {
     expect(permissions.browser_click_element).toBe('allow');
     expect(permissions.browser_type_into).toBe('allow');
     expect(permissions.browser_close_tab).toBe('allow');
+    expect(permissions.browser_begin_task).toBe('allow');
+    expect(permissions.browser_complete_task).toBe('allow');
     expect(permissions.bash).toBeUndefined();
   });
 

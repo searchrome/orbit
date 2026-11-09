@@ -11,7 +11,9 @@ const { JSDOM } = require('jsdom');
 
 function loadBrowserTools() {
     const source = fs.readFileSync(path.join(__dirname, '..', 'browser-tools.js'), 'utf8');
-    const transformed = source.replace(/export default BrowserTools;\s*$/, 'module.exports = BrowserTools;');
+    const transformed = source
+        .replace("import { normalizeBrowserToolUrl } from './browser-url-policy.js';", fs.readFileSync(path.join(__dirname, '../browser-url-policy.js'), 'utf8').replace('export function', 'function'))
+        .replace(/export default BrowserTools;\s*$/, 'module.exports = BrowserTools;');
     const module = { exports: {} };
     new Function('module', 'exports', 'require', transformed)(module, module.exports, require);
     return module.exports;

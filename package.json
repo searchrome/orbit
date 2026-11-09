@@ -1,6 +1,6 @@
 {
   "name": "browser",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "Orbit: an Electron browser with AI assistants, tab groups, saved sessions, and media casting",
   "main": "main.js",
   "scripts": {

@@ -4,7 +4,9 @@ const path = require('node:path');
 function loadBrowserTools() {
     // Load the source directly because the repo's Jest setup does not transpile this ESM file.
     const source = fs.readFileSync(path.join(__dirname, '../../browser-tools.js'), 'utf8');
-    const transformed = source.replace(/export default BrowserTools;\s*$/, 'module.exports = BrowserTools;');
+    const transformed = source
+        .replace("import { normalizeBrowserToolUrl } from './browser-url-policy.js';", fs.readFileSync(path.join(__dirname, '../../browser-url-policy.js'), 'utf8').replace('export function', 'function'))
+        .replace(/export default BrowserTools;\s*$/, 'module.exports = BrowserTools;');
     const module = { exports: {} };
     const factory = new Function('module', 'exports', 'require', transformed);
     factory(module, module.exports, require);
@@ -12,6 +14,19 @@ function loadBrowserTools() {
 }
 
 const BrowserTools = loadBrowserTools();
+
+test.each(['file:///tmp/private.txt', 'javascript:alert(1)', 'data:text/html,test', 'about:config'])(
+    'direct browser operations reject unsafe navigation before touching a page: %s', async url => {
+        const tab = {id: 'original', url: 'https://example.com', webview: {loadURL: jest.fn()}};
+        const manager = {tabs: [tab], getTabById: () => tab, createTab: jest.fn()};
+        const tools = new BrowserTools(manager);
+        expect(tools.openTab({url}).ok).toBe(false);
+        expect((await tools.navigateTab({tabId: tab.id, url})).ok).toBe(false);
+        expect(manager.createTab).not.toHaveBeenCalled();
+        expect(tab.webview.loadURL).not.toHaveBeenCalled();
+        expect(tab.url).toBe('https://example.com');
+    }
+);
 
 function createMockWebview({
     url = 'https://example.com/search',

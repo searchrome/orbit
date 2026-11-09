@@ -3,19 +3,18 @@ const { contextBridge, ipcRenderer } = require('electron');
 // The assistant planner is only callable from the host browser window.
 // The host shell is loaded from index.html; assistant and site webviews are not.
 const isHostBrowserRenderer = (() => {
-  const pathname = typeof window !== 'undefined' && window.location && typeof window.location.pathname === 'string'
-    ? window.location.pathname.toLowerCase()
-    : '';
-
-  if (pathname.endsWith('/index.html')) {
-    return true;
-  }
-
-  return Array.isArray(process.argv) && process.argv.includes('--browser-host-renderer');
+  const args = Array.isArray(process.argv) ? process.argv : [];
+  const expected = args.find(arg => arg.startsWith('--browser-host-url='))?.slice('--browser-host-url='.length);
+  return process.isMainFrame === true
+    && args.includes('--browser-host-renderer')
+    && typeof expected === 'string'
+    && expected.startsWith('file:')
+    && window.location.href === expected;
 })();
 
 // Expose protected methods that allow the renderer process to use
 // the ipcRenderer without exposing the entire object
+if (isHostBrowserRenderer) {
 contextBridge.exposeInMainWorld('electronAPI', {
   // Send messages from renderer to main (one-way)
   send: (channel, data) => {
@@ -105,55 +104,4 @@ contextBridge.exposeInMainWorld('electronAPI', {
   }
 });
 
-// This runs in the guest preload context, where ipcRenderer is available.  Keeping
-// the handler here (rather than injecting a page-world script) means it continues
-// to work with context isolation enabled.
-if (!isHostBrowserRenderer) {
-  // Only app-owned transformed-view tabs are accepted by the host. Exposing
-  // this narrow bridge in guest contexts is safe because the host verifies
-  // the requesting tab's role before acting on any message.
-  contextBridge.exposeInMainWorld('transformedViewAPI', {
-    send: (channel) => {
-      if (['transformed-view-ready', 'transformed-view-refresh', 'transformed-view-open-original'].includes(channel)) {
-        ipcRenderer.sendToHost(channel);
-      }
-    },
-    onData: (listener) => {
-      if (typeof listener !== 'function') return;
-      ipcRenderer.on('transformed-view-data', (_event, payload) => listener(payload));
-    }
-  });
-
-  const getAnchorFromEvent = (event) => {
-    const eventPath = typeof event.composedPath === 'function' ? event.composedPath() : [];
-    const pathAnchor = eventPath.find((node) => node && node.tagName === 'A' && node.href);
-
-    if (pathAnchor) {
-      return pathAnchor;
-    }
-
-    return event.target && typeof event.target.closest === 'function'
-      ? event.target.closest('a[href]')
-      : null;
-  };
-
-  document.addEventListener('click', (event) => {
-    // Ctrl-click is requested; Cmd-click supplies the same expected new-tab
-    // behaviour on macOS. Only primary-button link activation is intercepted.
-    if (event.defaultPrevented || event.button !== 0 || (!event.ctrlKey && !event.metaKey)) {
-      return;
-    }
-
-    const anchor = getAnchorFromEvent(event);
-    const url = anchor && anchor.href;
-    if (!url || url.toLowerCase().startsWith('javascript:')) {
-      return;
-    }
-
-    event.preventDefault();
-    event.stopImmediatePropagation();
-    ipcRenderer.sendToHost('open-in-new-tab', { url, timestamp: Date.now() });
-  }, true);
 }
-
-console.log('preload.js loaded and contextBridge executed.');

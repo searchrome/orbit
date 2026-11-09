@@ -2,6 +2,7 @@ export const MUTATING_BROWSER_TOOLS = new Set([
     'open_tab',
     'focus_tab',
     'close_tab',
+    'cleanup_task_tabs',
     'navigate_tab',
     'click_element',
     'press_and_hold',

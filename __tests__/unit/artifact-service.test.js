@@ -46,6 +46,11 @@ describe('ArtifactService', () => {
 
     const view = await get(html.artifact.viewUrl);
     expect(view.headers['content-security-policy']).toContain("connect-src 'none'");
+    expect(view.headers['content-security-policy']).toContain('sandbox allow-scripts;');
+    expect(view.headers['content-security-policy']).not.toContain('allow-same-origin');
+    expect(view.headers['content-security-policy']).toContain("frame-ancestors 'none'");
+    expect(view.headers['content-security-policy']).toContain("worker-src 'none'");
+    expect(view.headers['referrer-policy']).toBe('no-referrer');
     expect(view.body.toString()).toBe('<h1>Report</h1>');
     const preview = await get(csv.artifact.viewUrl);
     expect(preview.headers['content-security-policy']).toContain('allow-downloads');

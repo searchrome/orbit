@@ -170,7 +170,7 @@ describe('TabManager', () => {
     tabManager.createTab('https://example.com');
 
     const webview = document.querySelector('.tab-webview');
-    expect(webview.getAttribute('preload')).toBe(new URL('./preload.js', window.location.href).href);
+    expect(webview.getAttribute('preload')).toBe(new URL('./guest-preload.js', window.location.href).href);
     expect(webview.hasAttribute('allowpopups')).toBe(true);
   });
 
@@ -180,6 +180,16 @@ describe('TabManager', () => {
     const webview = document.querySelector('.tab-webview');
     expect(webview.getAttribute('nodeintegration')).toBe('false');
     expect(webview.getAttribute('preload')).toBeNull();
+  });
+
+  test('only bundled reading and recovery pages receive their narrow preload', () => {
+    const local = `file://${new URL('./transformed-view.html', window.location.href).pathname}?viewId=example`;
+    const view = tabManager._createTabWebview('reader', null, local);
+    expect(view.getAttribute('preload')).toContain('transformed-preload.js');
+    const remote = tabManager._createTabWebview('remote', null, 'https://attacker.example/transformed-view.html');
+    expect(remote.getAttribute('preload')).toContain('guest-preload.js');
+    const recovery = tabManager._createTabWebview('crashed', null, `file://${new URL('./tab-crashed.html', window.location.href).pathname}`);
+    expect(recovery.getAttribute('preload')).toContain('tab-crashed-preload.js');
   });
 
   test('should create hidden tabs without showing them in the tab bar', () => {
@@ -430,6 +440,7 @@ describe('TabManager', () => {
   });
 
   test('keeps an interrupted loading tab paused until the user explicitly reloads it', () => {
+    tabManager._getCrashedTabPageUrl = () => `file://${new URL('./tab-crashed.html', window.location.href).pathname}`;
     const errorOverlay = document.createElement('div');
     errorOverlay.id = 'error-message-overlay';
     document.body.appendChild(errorOverlay);
@@ -443,6 +454,7 @@ describe('TabManager', () => {
     expect(tab.recoveryUrl).toBe('https://example.com/report');
     expect(tab.loadState).toBe('crashed');
     expect(tab.webview.getAttribute('src')).toContain('tab-crashed.html');
+    expect(tab.webview.getAttribute('preload')).toContain('tab-crashed-preload.js');
     expect(document.getElementById('error-message-overlay').textContent).toBe('');
 
     tab.webview.loadURL = jest.fn();

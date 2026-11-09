@@ -1,4 +1,5 @@
 import BrowserTools from './browser-tools.js';
+import { normalizeBrowserToolUrl } from './browser-url-policy.js';
 import BrowserActionCoordinator, { MUTATING_BROWSER_TOOLS } from './browser-action-coordinator.js';
 
 const MAX_TEXT_LENGTH = 20_000;
@@ -267,6 +268,7 @@ export default class BrowserToolDispatcher {
         this.browserTools = new BrowserTools(tabManager);
         this.coordinator = coordinator;
         this.transformedViews = transformedViews;
+        this.taskTabs = new Map();
     }
 
     async executeBatchRead(rawArgs, execution = {}) {
@@ -375,15 +377,49 @@ export default class BrowserToolDispatcher {
             case 'open_tab': {
                 const url = stringValue(args.url, 'url', MAX_URL_LENGTH);
                 if (url.error) return error(url.error);
-                return normalizeResult(this.browserTools.openTab({
-                    url: url.value,
+                const safeUrl = normalizeBrowserToolUrl(url.value);
+                if (!safeUrl) return error('Browser tools allow only HTTP, HTTPS, or about:blank URLs.', 'unsafe_url_scheme');
+                const result = this.browserTools.openTab({
+                    url: safeUrl,
                     activate: args.activate !== false,
                     title: typeof args.title === 'string' ? args.title.slice(0, 250) : 'New Tab',
                     assistantOwned: true,
                     role: 'browser',
                     hidden: false,
                     trackHistory: true
-                }));
+                });
+                if (result?.ok !== false && typeof args._taskId === 'string' && args._taskId.length <= 200) {
+                    const tab = this.browserTools.getTab(result?.id);
+                    if (tab) {
+                        if (!this.taskTabs.has(args._taskId)) this.taskTabs.set(args._taskId, new Set());
+                        this.taskTabs.get(args._taskId).add(tab);
+                    }
+                }
+                return normalizeResult(result);
+            }
+            case 'cleanup_task_tabs': {
+                const task = stringValue(args.taskId, 'taskId', 200);
+                if (task.error) return error(task.error);
+                const owned = this.taskTabs.get(task.value) || new Set();
+                const keep = new Set(Array.isArray(args.keepTabIds) ? args.keepTabIds : []);
+                const sources = new Set((Array.isArray(args.protectedUrls) ? args.protectedUrls : []).map(url => normalizeBrowserToolUrl(url) || url));
+                const closedTabIds = [], keptTabs = [], failedTabIds = [];
+                for (const tab of owned) {
+                    if (signal?.aborted) return {ok: false, data: {closedTabIds, keptTabs, failedTabIds}, error: {code: 'browser_action_cancelled', message: 'Tab cleanup was cancelled; retry complete_task.', retryable: true}};
+                    // Compare object identity as well as the tab ID. A browser
+                    // session switch/reload must never make an old ID own a new tab.
+                    if (this.browserTools.getTab(tab.id) !== tab) continue;
+                    const artifact = /^https?:\/\/(?:127\.0\.0\.1|localhost|\[::1\])(?::\d+)?\/artifact\//i.test(tab.url);
+                    if (!tab.assistantOwned || tab.hidden || tab.internal || tab.role !== 'browser' || artifact || keep.has(tab.id) || sources.has(tab.url) || !/^(https?:\/\/|about:blank$)/i.test(tab.url)) {
+                        keptTabs.push({tabId: tab.id, reason: sources.has(tab.url) ? 'live_artifact_source' : 'retained'});
+                        continue;
+                    }
+                    const result = this.browserTools.closeTab({tabId: tab.id});
+                    if (result?.ok === false) failedTabIds.push(tab.id);
+                    else { closedTabIds.push(tab.id); owned.delete(tab); }
+                }
+                if (!failedTabIds.length) this.taskTabs.delete(task.value);
+                return {ok: !failedTabIds.length, data: {closedTabIds, keptTabs, failedTabIds}, ...(failedTabIds.length ? {error: {code: 'tab_cleanup_failed', message: 'Some task tabs could not be closed. Retry complete_task.', retryable: true}} : {})};
             }
             case 'focus_tab':
                 return normalizeResult(this.browserTools.focusTab({ tabId: args.tabId }));
@@ -392,11 +428,13 @@ export default class BrowserToolDispatcher {
             case 'navigate_tab': {
                 const url = stringValue(args.url, 'url', MAX_URL_LENGTH);
                 if (url.error) return error(url.error);
+                const safeUrl = normalizeBrowserToolUrl(url.value);
+                if (!safeUrl) return error('Browser tools allow only HTTP, HTTPS, or about:blank URLs.', 'unsafe_url_scheme');
                 const timeout = boundedNumber(args.timeoutMs, 12_000, 500, MAX_WAIT_MS, 'timeoutMs');
                 if (timeout.error) return error(timeout.error);
                 return normalizeResult(await this.browserTools.navigateTab({
                     tabId: args.tabId,
-                    url: url.value,
+                    url: safeUrl,
                     timeoutMs: timeout.value
                 }));
             }

@@ -15,6 +15,19 @@ In a private report, include the affected revision, reproduction steps,
 expected impact, and any suggested mitigation. Redact API keys, tokens,
 cookies, and personal information from logs and screenshots.
 
+## Browser content boundaries
+
+AI navigation accepts only HTTP, HTTPS, and a blank page. The full application
+IPC bridge is restricted to the exact bundled host document; websites receive
+no application API. Bundled reader and recovery pages use separate narrow
+preloads that check their trusted local document before exposing controls.
+
+Generated HTML is interactive inside an opaque-origin sandbox, without
+same-origin permission, network access, or an Electron bridge. Dynamic apps
+use an isolated iframe and a limited data/refresh/storage interface. See the
+[source review evidence](docs/source-review-evidence.md) for implementation
+entry points and regression checks.
+
 ## Credentials and development
 
 Keep credentials in local settings or ignored environment files. Use only

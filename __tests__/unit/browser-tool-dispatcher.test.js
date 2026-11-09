@@ -4,6 +4,7 @@ const path = require('node:path');
 function loadDispatcher(state) {
     const source = fs.readFileSync(path.join(__dirname, '../../browser-tool-dispatcher.js'), 'utf8');
     const transformed = source
+        .replace("import { normalizeBrowserToolUrl } from './browser-url-policy.js';", fs.readFileSync(path.join(__dirname, '../../browser-url-policy.js'), 'utf8').replace('export function', 'function'))
         .replace("import BrowserTools from './browser-tools.js';", "const BrowserTools = require('__browser_tools__');")
         .replace("import BrowserActionCoordinator, { MUTATING_BROWSER_TOOLS } from './browser-action-coordinator.js';", "const { BrowserActionCoordinator, MUTATING_BROWSER_TOOLS } = require('__browser_action_coordinator__');")
         .replace('export default class BrowserToolDispatcher', 'class BrowserToolDispatcher')
@@ -12,6 +13,14 @@ function loadDispatcher(state) {
     class MockBrowserTools {
         constructor() {
             state.browserTools = this;
+            state.tabs ||= new Map();
+            this.getTab = jest.fn(id => state.tabs.get(id));
+            this.openTab = jest.fn(options => {
+                const id = `opened-${state.tabs.size}`;
+                state.tabs.set(id, {...options, id});
+                return {ok: true, id};
+            });
+            this.closeTab = jest.fn(({tabId}) => {state.tabs.delete(tabId); return {ok: true};});
             this.readPageText = jest.fn().mockResolvedValue({ ok: true, text: '' });
             this.querySelectorAll = jest.fn().mockResolvedValue({ ok: true, items: [] });
             this.findPageText = jest.fn().mockResolvedValue({ ok: true, matches: [] });
@@ -51,6 +60,53 @@ function loadDispatcher(state) {
 }
 
 describe('BrowserToolDispatcher selector limits', () => {
+    test.each(['file:///tmp/private.txt', 'javascript:alert(1)', 'data:text/html,test', 'about:config', 'browser://view/test', 'ftp://example.com', 'not a URL'])(
+        'rejects unsafe AI URL %s before tab creation or navigation', async url => {
+            const state = {};
+            const Dispatcher = loadDispatcher(state);
+            const dispatcher = new Dispatcher({});
+            state.browserTools.navigateTab = jest.fn();
+            for (const tool of ['open_tab', 'navigate_tab']) {
+                const result = await dispatcher.execute(tool, {url, tabId: 'original'});
+                expect(result.error.code).toBe('unsafe_url_scheme');
+            }
+            expect(state.browserTools.openTab).not.toHaveBeenCalled();
+            expect(state.browserTools.navigateTab).not.toHaveBeenCalled();
+        }
+    );
+    test('task cleanup preserves original tabs, results, retained tabs, and live-artifact sources', async () => {
+        const state = {};
+        const Dispatcher = loadDispatcher(state);
+        const dispatcher = new Dispatcher({});
+        state.tabs.set('original', {id: 'original', url: 'https://user.example', role: 'browser', assistantOwned: true});
+        const open = async url => (await dispatcher.execute('open_tab', {url, _taskId: 'task-a'})).data.id;
+        const temporary = await open('https://temporary.example');
+        const source = await open('https://live.example');
+        const result = await open('http://127.0.0.1:1234/artifact/result/token/view');
+        const retained = await open('https://keep.example');
+        const other = (await dispatcher.execute('open_tab', {url: 'https://other.example', _taskId: 'task-b'})).data.id;
+        const cleanup = await dispatcher.execute('cleanup_task_tabs', {taskId: 'task-a', keepTabIds: [retained], protectedUrls: ['https://live.example']});
+        expect(cleanup.ok).toBe(true);
+        expect(cleanup.data.closedTabIds).toEqual([temporary]);
+        expect([...state.tabs.keys()]).toEqual(['original', source, result, retained, other]);
+        expect(cleanup.data.keptTabs).toContainEqual({tabId: source, reason: 'live_artifact_source'});
+    });
+
+    test('cleanup cannot close a new tab reusing an old ID and retries failed closes', async () => {
+        const state = {};
+        const Dispatcher = loadDispatcher(state);
+        const dispatcher = new Dispatcher({});
+        const old = (await dispatcher.execute('open_tab', {url: 'https://old.example', _taskId: 'task'})).data.id;
+        const replacement = {id: old, url: 'https://user.example', role: 'browser', assistantOwned: true};
+        state.tabs.set(old, replacement);
+        const failing = (await dispatcher.execute('open_tab', {url: 'https://failing.example', _taskId: 'task'})).data.id;
+        state.browserTools.closeTab.mockReturnValueOnce({ok: false});
+        expect((await dispatcher.execute('cleanup_task_tabs', {taskId: 'task'})).ok).toBe(false);
+        expect(state.tabs.get(old)).toBe(replacement);
+        const retried = await dispatcher.execute('cleanup_task_tabs', {taskId: 'task'});
+        expect(retried.data.closedTabIds).toEqual([failing]);
+        expect(state.tabs.get(old)).toBe(replacement);
+    });
     test('creates a saved transformed view through the renderer manager', async () => {
         const state = {};
         const BrowserToolDispatcher = loadDispatcher(state);

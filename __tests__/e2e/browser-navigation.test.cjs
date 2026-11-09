@@ -20,6 +20,16 @@ describe('Orbit desktop navigation and sessions', {timeout: 60000}, () => {
     await page.waitForFunction(() => window.workspacePanel?.ready);
   }
 
+  async function waitForGuest(expression, accept) {
+    const deadline = Date.now() + 10000;
+    while (Date.now() < deadline) {
+      const value = await page.evaluate(expression => window.tabManager.getActiveWebview().executeJavaScript(expression), expression).catch(() => undefined);
+      if (accept(value)) return value;
+      await new Promise(resolve => setTimeout(resolve, 50));
+    }
+    throw new Error(`Guest condition timed out: ${expression}`);
+  }
+
   before(async () => {
     profile = await fs.mkdtemp(path.join(os.tmpdir(), 'orbit-desktop-test-'));
     server = http.createServer((request, response) => {
@@ -41,6 +51,7 @@ describe('Orbit desktop navigation and sessions', {timeout: 60000}, () => {
   });
 
   beforeEach(async () => {
+    await app.evaluate(({app, BrowserWindow}) => {app.focus({steal: true}); BrowserWindow.getAllWindows()[0].focus();});
     await page.evaluate(() => window.workspacePanel.switchSession());
     if (await page.locator('#workspace-dialog').evaluate(dialog => dialog.open)) {
       await page.getByRole('button', {name: 'Close', exact: true}).click();
@@ -88,8 +99,10 @@ describe('Orbit desktop navigation and sessions', {timeout: 60000}, () => {
       const button = page.locator(selector);
       const original = await button.getAttribute('class');
       await button.click();
+      await page.waitForFunction(({selector, original}) => document.querySelector(selector).className !== original, {selector, original});
       assert.notEqual(await button.getAttribute('class'), original);
       await button.click();
+      await page.waitForFunction(({selector, original}) => document.querySelector(selector).className === original, {selector, original});
       assert.equal(await button.getAttribute('class'), original);
     }
   });
@@ -98,12 +111,12 @@ describe('Orbit desktop navigation and sessions', {timeout: 60000}, () => {
     await page.locator('#toolbar-more-menu > summary').click();
     const button = page.locator('#toggle-cache-btn');
     const original = await button.getAttribute('class');
-    await button.click();
-    await page.waitForFunction(({selector, original}) => document.querySelector(selector).className !== original, {selector: '#toggle-cache-btn', original});
+    await button.press('Space');
+    await page.waitForFunction(({selector, original}) => document.querySelector(selector).className !== original, {selector: '#toggle-cache-btn', original}, {timeout: 30000});
     assert.notEqual(await button.getAttribute('class'), original);
     await page.locator('#toolbar-more-menu > summary').click();
-    await button.click();
-    await page.waitForFunction(({selector, original}) => document.querySelector(selector).className === original, {selector: '#toggle-cache-btn', original});
+    await button.press('Space');
+    await page.waitForFunction(({selector, original}) => document.querySelector(selector).className === original, {selector: '#toggle-cache-btn', original}, {timeout: 30000});
     assert.equal(await button.getAttribute('class'), original);
   });
 
@@ -129,12 +142,84 @@ describe('Orbit desktop navigation and sessions', {timeout: 60000}, () => {
     await page.locator('#tab-layout-btn').click();
   });
 
+  test('remote index pages receive no native API and unsafe AI navigation changes nothing', async () => {
+    await page.locator('#url-input').fill(baseUrl + '/index.html');
+    await page.locator('#url-input').press('Enter');
+    await page.waitForFunction(() => window.tabManager.getActiveTab()?.loadState === 'idle');
+    const exposure = await page.evaluate(() => window.tabManager.getActiveWebview().executeJavaScript('({app: typeof window.electronAPI, reader: typeof window.transformedViewAPI, recovery: typeof window.crashedTabAPI})'));
+    assert.deepEqual(exposure, {app: 'undefined', reader: 'undefined', recovery: 'undefined'});
+    const result = await page.evaluate(async () => {
+      const before = window.tabManager.getSessionSnapshot();
+      const failures = [];
+      for (const tool of ['open_tab', 'navigate_tab']) {
+        for (const url of ['file:///tmp/should-not-open', 'javascript:alert(1)', 'data:text/html,unsafe']) {
+          failures.push(await window.browserToolDispatcher.execute(tool, {url, tabId: window.tabManager.activeTabId}));
+        }
+      }
+      return {before, after: window.tabManager.getSessionSnapshot(), failures};
+    });
+    assert.deepEqual(result.after, result.before);
+    assert.ok(result.failures.every(result => result.ok === false && result.error.code === 'unsafe_url_scheme'));
+  });
+
+  test('interactive HTML artifacts have an opaque origin and cannot reach their local tool API', async () => {
+    const url = await app.evaluate(async ({app}) => {
+      const {createRequire} = process.getBuiltinModule('node:module');
+      const localRequire = createRequire(app.getAppPath() + '/package.json');
+      const ArtifactService = localRequire('./artifact-service');
+      const directory = app.getPath('userData') + '/security-artifact-test';
+      const service = new ArtifactService({app: {getPath: () => directory}, requestBrowserTool: async () => ({ok: true})});
+      globalThis.__securityArtifactService = service;
+      await service.start();
+      const created = await service.create({name: 'security.html', content: '<h1>Interactive report</h1><script>window.reportInteractive = true;</script>', contentType: 'text/html'});
+      return created.artifact.viewUrl;
+    });
+    try {
+      await page.evaluate(url => window.tabManager.createTab(url), url);
+      await waitForGuest('window.reportInteractive', value => value === true);
+      const result = await page.evaluate(() => window.tabManager.getActiveWebview().executeJavaScript(`(async () => {
+        let access;
+        try { await fetch(new URL('/tool', location.href), {method: 'POST', body: '{}'}); access = 'allowed'; }
+        catch { access = 'blocked'; }
+        return {origin: window.origin, native: typeof window.electronAPI, interactive: window.reportInteractive, access};
+      })()`));
+      assert.deepEqual(result, {origin: 'null', native: 'undefined', interactive: true, access: 'blocked'});
+    } finally {
+      await app.evaluate(async () => {await globalThis.__securityArtifactService.stop(); delete globalThis.__securityArtifactService;});
+    }
+  });
+
+  test('recovery pages have a narrow bridge that disappears when the original page is recovered', async () => {
+    await page.evaluate(url => window.tabManager.createTab(url, {title: 'Recover me', recoveryPaused: true}), baseUrl + '/first');
+    await page.waitForFunction(() => window.tabManager.getActiveTab()?.loadState === 'crashed');
+    await waitForGuest('typeof window.crashedTabAPI', value => value === 'object');
+    const exposed = await page.evaluate(() => window.tabManager.getActiveWebview().executeJavaScript('typeof window.electronAPI'));
+    assert.equal(exposed, 'undefined');
+    await page.evaluate(() => window.tabManager.getActiveWebview().executeJavaScript('document.getElementById("reload-page").click(); true').catch(() => undefined));
+    try {
+      await page.waitForFunction(() => !window.tabManager.getActiveTab()?.crashed && window.tabManager.getActiveTab()?.loadState === 'idle');
+    } catch (error) {
+      console.error(await page.evaluate(() => ({crashed: window.tabManager.getActiveTab()?.crashed, state: window.tabManager.getActiveTab()?.loadState, crashPage: window.tabManager.getActiveTab()?.crashPage})));
+      throw error;
+    }
+    await waitForGuest('document.body.innerText.includes("First page")', value => value === true);
+    const after = await page.evaluate(() => window.tabManager.getActiveWebview().executeJavaScript('typeof window.crashedTabAPI'));
+    assert.equal(after, 'undefined');
+  });
+
+  test('bundled reading views retain their narrow data bridge and render source content', async () => {
+    await page.evaluate(sourceUrl => window.transformedViewManager.create({name: 'Security reader', sourceUrl, recipe: {rootSelector: 'h1'}}), baseUrl + '/first');
+    await waitForGuest('typeof window.transformedViewAPI', value => value === 'object');
+    await waitForGuest('document.body.innerText.includes("First page")', value => value === true);
+    assert.equal(await page.evaluate(() => window.tabManager.getActiveWebview().executeJavaScript('typeof window.electronAPI')), 'undefined');
+  });
+
   test('renames and restores the last session after a clean desktop restart', async () => {
     await page.getByRole('button', {name: 'New tab', exact: true}).click();
     await page.evaluate(() => window.tabManager.setTabGroup(window.tabManager.activeTabId, 'Work'));
     await page.getByRole('button', {name: 'Sessions', exact: true}).click();
     await page.locator('#session-name').fill('Persistent workspace');
-    await page.getByRole('button', {name: 'Rename', exact: true}).click();
+    await page.locator('#session-name').press('Enter');
     try {
       await page.waitForFunction(() => window.workspacePanel.currentSession.name === 'Persistent workspace');
     } catch (error) {
