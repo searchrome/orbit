@@ -63,6 +63,17 @@ describe('SettingsPanel', () => {
     expect(document.getElementById('settings-status').textContent).toContain('Start a new OpenCode session');
   });
 
+  test('keeps version settings accessible when OpenCode is disabled', async () => {
+    panel.setEnabled(false);
+    await panel.show();
+    expect(document.getElementById('settings-btn').hidden).toBe(false);
+    expect(document.getElementById('settings-panel').hidden).toBe(false);
+    expect(document.getElementById('settings-form').hidden).toBe(true);
+    expect(window.electronAPI.invoke).not.toHaveBeenCalled();
+    panel.setEnabled(true);
+    expect(document.getElementById('settings-form').hidden).toBe(false);
+  });
+
   test('a mask-only field is treated as unchanged and never resent', async () => {
     window.electronAPI.invoke
       .mockResolvedValueOnce({ model: 'openrouter/default-model', openRouterKeyConfigured: true, openRouterKeySource: 'saved', secureCredentialStorageAvailable: true })

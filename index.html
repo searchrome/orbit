@@ -11,6 +11,12 @@
     <link rel="stylesheet" href="./node_modules/@xterm/xterm/css/xterm.css">
 </head>
 <body>
+    <div data-update-notice class="update-notice update-notice--main" role="status" hidden>
+        <span>A newer version is available <small data-update-version></small></span>
+        <a data-update-download target="_blank" rel="noopener noreferrer">Download</a>
+        <button data-update-dismiss type="button" aria-label="Dismiss update notice" title="Dismiss update notice">×</button>
+    </div>
+
     <div id="workspace-bar">
         <img src="icons/orbit.svg" width="26" height="26" alt="">
         <span class="workspace-brand">Orbit</span>
@@ -155,14 +161,22 @@
         </form>
         <div id="bookmarks-list" class="bookmarks-panel__list"></div>
     </aside>
-    <aside id="settings-panel" class="settings-panel" aria-label="OpenCode settings" hidden>
+    <aside id="settings-panel" class="settings-panel" aria-label="Browser settings" hidden>
         <div class="settings-panel__header">
             <div>
-                <div class="settings-panel__eyebrow">OpenCode</div>
+                <div class="settings-panel__eyebrow">Orbit</div>
                 <h2>Settings</h2>
             </div>
             <button id="settings-close-btn" class="artifact-panel__icon-button" type="button" aria-label="Close settings">×</button>
         </div>
+        <section class="settings-panel__updates" aria-label="Version updates">
+            <p>Orbit <span data-current-version></span></p>
+            <div data-update-notice class="update-notice" role="status" hidden>
+                <span>A newer version is available <small data-update-version></small></span>
+                <a data-update-download target="_blank" rel="noopener noreferrer">Download</a>
+                <button data-update-dismiss type="button" aria-label="Dismiss update notice" title="Dismiss update notice">×</button>
+            </div>
+        </section>
         <form id="settings-form" class="settings-panel__form">
             <label for="settings-provider">Provider</label>
             <select id="settings-provider"><option value="opencode-go">OpenCode Go</option><option value="entrim">Entrim</option><option value="openrouter">OpenRouter</option><option value="custom">Other configured provider</option></select>

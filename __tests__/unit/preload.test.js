@@ -21,7 +21,7 @@ function loadPreload({file = 'preload.js', href = hostUrl, argv = hostArgs, isMa
 }
 
 describe('host and guest preload separation', () => {
-  test.each(['workspace-autosave', 'workspace-switch', 'workspace-rename', 'workspace-delete', 'assistant-next-action', 'cast-extract-video'])(
+  test.each(['workspace-autosave', 'workspace-switch', 'workspace-rename', 'workspace-delete', 'assistant-next-action', 'cast-extract-video', 'updates-get-state', 'updates-dismiss', 'updates-open-download'])(
     'allows %s only in the trusted application document', async channel => {
       const host = loadPreload();
       await expect(host.window.electronAPI.invoke(channel, {})).resolves.toBe('result');

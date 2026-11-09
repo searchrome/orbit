@@ -32,6 +32,10 @@ describe('Orbit desktop navigation and sessions', {timeout: 60000}, () => {
 
   before(async () => {
     profile = await fs.mkdtemp(path.join(os.tmpdir(), 'orbit-desktop-test-'));
+    // Keep desktop tests deterministic and offline; signed fetching is covered in unit tests.
+    await fs.writeFile(path.join(profile, 'update-check-state.json'), JSON.stringify({
+      lastAttempt: Date.now(), dismissed: [], cached: null
+    }));
     server = http.createServer((request, response) => {
       const title = request.url === '/second' ? 'Second page' : 'First page';
       response.writeHead(200, {'Content-Type': 'text/html'});
@@ -68,6 +72,29 @@ describe('Orbit desktop navigation and sessions', {timeout: 60000}, () => {
     });
     assert.match(saved.name, /^Session /);
     assert.equal(saved.session.tabs[0].url, 'about:blank');
+  });
+
+  test('displays update notices in the main window and Settings and dismisses both', async () => {
+    const state = await page.evaluate(() => window.electronAPI.invoke('updates-get-state'));
+    assert.equal(state.currentVersion, `v${require('../../package.json').version}`);
+    // Exercise the real preload event and UI without replacing the production signing key.
+    await app.evaluate(({BrowserWindow}) => {
+      BrowserWindow.getAllWindows()[0].webContents.send('updates-status', {
+        currentVersion: 'v1.0.3',
+        update: { version: 'v1.0.4', downloadUrl: 'https://cookthisapp.com/download' }
+      });
+    });
+    const mainNotice = page.locator('.update-notice--main');
+    await mainNotice.waitFor({state: 'visible'});
+    assert.match(await mainNotice.textContent(), /A newer version is available/);
+    await page.evaluate(() => window.settingsPanel.show());
+    const settingsNotice = page.locator('#settings-panel [data-update-notice]');
+    await settingsNotice.waitFor({state: 'visible'});
+    assert.equal(await settingsNotice.locator('a').getAttribute('href'), 'https://cookthisapp.com/download');
+    await settingsNotice.getByRole('button', {name: 'Dismiss update notice'}).click();
+    await settingsNotice.waitFor({state: 'hidden'});
+    await mainNotice.waitFor({state: 'hidden'});
+    await page.getByRole('button', {name: 'Close settings', exact: true}).click();
   });
 
   test('navigates pages and goes back using the real guest webview', async () => {

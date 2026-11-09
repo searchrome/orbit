@@ -65,6 +65,19 @@ For feature implementation entry points and security regression coverage, see
 
 ## Usage
 
+### Version updates
+
+Orbit checks CookThisApp for a newer release at launch and at most once per hour,
+including across restarts. A small, dismissible notice appears in the main window
+and Settings when a newer release is available. Dismissing it hides that version;
+a later release can show a new notice. The Download link opens in your default
+browser only when clicked. Orbit never automatically downloads or installs updates.
+
+Update manifests must carry a valid Ed25519 signature matching the pinned public
+key before their contents are read. Offline checks, missing releases (404), and
+invalid signatures stay silent. The endpoint and current version are recorded in
+`cookthisapp.json`; runtime version comparison uses Orbit's application version.
+
 ### Search tabs
 
 Click the magnifying glass beside the tab layout and group buttons to search

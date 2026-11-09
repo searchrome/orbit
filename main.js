@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, session, webContents, safeStorage, dialog, powerSaveBlocker } = require('electron');
+const { app, BrowserWindow, ipcMain, session, webContents, safeStorage, dialog, powerSaveBlocker, shell } = require('electron');
 const path = require('path');
 const { pathToFileURL } = require('node:url');
 const fs = require('fs').promises;
@@ -277,6 +277,32 @@ function isHostBrowserEvent(event) {
     event &&
     [...browserWindows].some(window => !window.isDestroyed() && event.sender === window.webContents)
   );
+}
+
+const { UpdateService } = require('./update-service');
+const updateService = new UpdateService({
+  currentVersion: app.getVersion(),
+  statePath: path.join(app.getPath('userData'), 'update-check-state.json')
+});
+updateService.on('change', state => {
+  for (const window of browserWindows) {
+    if (!window.isDestroyed()) window.webContents.send('updates-status', state);
+  }
+});
+for (const channel of ['updates-get-state', 'updates-dismiss', 'updates-open-download']) {
+  ipcMain.handle(channel, async event => {
+    if (!isHostBrowserEvent(event) || event.senderFrame !== event.sender.mainFrame) {
+      throw new Error('Updates are restricted to the browser window.');
+    }
+    if (channel === 'updates-dismiss') return updateService.dismiss();
+    if (channel === 'updates-open-download') {
+      const update = updateService.getState().update;
+      if (!update) return false;
+      await shell.openExternal(update.downloadUrl);
+      return true;
+    }
+    return updateService.getState();
+  });
 }
 
 function sendOpenCodeStatus(payload) {
@@ -1978,6 +2004,7 @@ app.whenReady().then(async () => {
   registerDownloadMonitoring(session.fromPartition('transformed-view-source'));
   if (process.platform === 'darwin') app.dock?.setIcon(path.join(__dirname, 'icons/orbit.png'));
   createWindow();
+  void updateService.start();
   await getArtifactServiceForHost();
   app.on('activate', function () {
     if (quitController.requested) return;
@@ -1986,6 +2013,7 @@ app.whenReady().then(async () => {
 });
 
 async function shutdownOpenCodeRuntime() {
+  updateService.stop();
   cancelAllBrowserToolRequests('browser_closed', 'The browser is closing.');
   endCastPowerSaveBlocker();
   const results = await Promise.allSettled([

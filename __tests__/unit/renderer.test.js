@@ -4,6 +4,7 @@ const path = require('node:path');
 function loadRenderer() {
     const source = fs.readFileSync(path.join(__dirname, '../../renderer.js'), 'utf8');
     const transformed = source
+        .replace("import UpdateNotice from './update-notice.js';", "const UpdateNotice = class {};")
         .replace("import WorkspacePanel from './workspace-panel.js';", "const WorkspacePanel = class { initialize() { this.ready = true; } autosave() { return Promise.resolve(); } updateSessionStatus() {} };")
         .replace("import TabManager from './tab-manager.js';", "const TabManager = require('__tab_manager__');")
         .replace("import Summarizer from './summarizer.js';", "const Summarizer = require('__summarizer__');")

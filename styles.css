@@ -1927,3 +1927,44 @@ body.vertical-tabs.narrow-tab-sidebar .workspace-brand { display: none; }
 .tab--suspended .tab-title { color: #8b91a4; }
 .tab--suspended .tab-favicon { opacity: .5; }
 .collapsed-groups-placeholder { position: absolute; inset: 0; display: grid; place-items: center; padding: 24px; color: #8b91a4; font-size: 13px; text-align: center; }
+
+/* Signed release notices are compact and never block browsing. */
+.settings-panel { max-height: calc(100vh - 100px); overflow-y: auto; }
+.settings-panel__updates { padding: 0 18px 12px; }
+.settings-panel__updates p { font-size: 13px; color: #475569; }
+.settings-panel__form[hidden] { display: none; }
+.update-notice {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 12px;
+    color: #e8edff;
+    background: #202c46;
+    border: 1px solid #5776ad;
+    border-radius: 10px;
+    font-size: 13px;
+}
+.update-notice[hidden] { display: none; }
+.update-notice--main {
+    position: fixed;
+    top: 112px;
+    right: 16px;
+    max-width: calc(100vw - 32px);
+    z-index: 100;
+    box-shadow: 0 4px 20px #0004;
+}
+.update-notice span { flex: 1; }
+.update-notice small { display: inline-block; opacity: .8; }
+.update-notice a { color: #b9d4ff; text-decoration: underline; cursor: pointer; }
+.update-notice button {
+    border: 0;
+    background: transparent;
+    color: inherit;
+    font-size: 20px;
+    padding: 2px 6px;
+    cursor: pointer;
+}
+.update-notice a:focus-visible, .update-notice button:focus-visible {
+    outline: 2px solid #b9d4ff;
+    outline-offset: 3px;
+}

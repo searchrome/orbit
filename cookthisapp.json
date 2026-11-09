@@ -1,0 +1,7 @@
+{
+  "updates": {
+    "strategy": "cookthisapp",
+    "current_version": "v1.0.3",
+    "check_url": "https://cookthisapp.com/api/updates/orbit-internet-browser-3454d89a/latest.json"
+  }
+}

@@ -144,6 +144,7 @@ import BrowserToolDispatcher from './browser-tool-dispatcher.js';
 import TerminalPanel from './terminal-panel.js';
 import ArtifactPanel from './artifact-panel.js';
 import SettingsPanel from './settings-panel.js';
+import UpdateNotice from './update-notice.js';
 import BookmarksPanel from './bookmarks-panel.js';
 import TransformedViewManager from './transformed-view-manager.js';
 import SessionFilesPanel from './session-files-panel.js';
@@ -187,6 +188,7 @@ const terminalPanel = new TerminalPanel({
 window.terminalPanel = terminalPanel;
 const artifactPanel = new ArtifactPanel();
 window.artifactPanel = artifactPanel;
+new UpdateNotice();
 const settingsPanel = new SettingsPanel();
 window.settingsPanel = settingsPanel;
 const bookmarksPanel = new BookmarksPanel({ historyManager, tabManager });

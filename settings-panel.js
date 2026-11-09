@@ -87,8 +87,9 @@ export default class SettingsPanel {
 
     setEnabled(enabled) {
         this.enabled = !!enabled;
-        if (this.openButton) this.openButton.hidden = !this.enabled;
-        if (!this.enabled) this.hide();
+        // Browser version information remains available without the AI terminal.
+        if (this.openButton) this.openButton.hidden = false;
+        if (this.form) this.form.hidden = !this.enabled;
     }
 
     setStatus(message = '', state = '') {
@@ -143,8 +144,9 @@ export default class SettingsPanel {
     }
 
     async show() {
-        if (!this.panel || !this.enabled) return;
+        if (!this.panel) return;
         this.panel.hidden = false;
+        if (!this.enabled) return;
         this.keyInput.value = '';
         this.keyInput.disabled = false;
         this.clearKeyInput.checked = false;
